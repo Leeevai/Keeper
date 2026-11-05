@@ -15,4 +15,5 @@ pub mod stats;
 pub mod storage;
 pub mod textinput;
 pub mod theme;
+pub mod ui;
 pub mod unicode;
