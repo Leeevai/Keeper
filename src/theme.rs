@@ -247,3 +247,33 @@ impl Base {
         }
     }
 }
+
+impl Theme {
+    pub fn all() -> &'static [Theme] {
+        static ALL: std::sync::OnceLock<Vec<Theme>> = std::sync::OnceLock::new();
+        ALL.get_or_init(|| {
+            let theme = |id, name, base: Option<Base>| Theme { id, name, colors: base.map(|b| b.palette()) };
+            #[rustfmt::skip]
+            let themes = vec![
+                theme("system", "System", None),
+                theme("light", "Light", Some(Base { primary: 0xf4f0f0, secondary: 0x282640, accent: 0x3d475c, error: 0xff3333, slow: 0xcc0000, fast: 0x60d788, mix: 0.0, dark: false })),
+                theme("dark", "Dark", Some(Base { primary: 0x333333, secondary: 0x9f9999, accent: 0x6c6666, error: 0x9b4545, slow: 0x8c1818, fast: 0x448154, mix: 50.0, dark: true })),
+                theme("gray", "Gray", Some(Base { primary: 0xb3b3b3, secondary: 0x262626, accent: 0x4d4d4d, error: 0xa34729, slow: 0xcf5f5f, fast: 0x6fa882, mix: 20.0, dark: false })),
+                theme("yellow", "Yellow", Some(Base { primary: 0xffe666, secondary: 0x26220d, accent: 0x736626, error: 0xb83d14, slow: 0xcc8b00, fast: 0x96d760, mix: 30.0, dark: false })),
+                theme("garden", "Garden", Some(Base { primary: 0xcee0a4, secondary: 0x334532, accent: 0x45633f, error: 0xe49874, slow: 0xcc0000, fast: 0x60d788, mix: 0.0, dark: false })),
+                theme("coffee", "Coffee", Some(Base { primary: 0xfaecd7, secondary: 0x262626, accent: 0x4d4d4d, error: 0xa34729, slow: 0xcf5f5f, fast: 0x6fa882, mix: 20.0, dark: false })),
+                theme("chocolate", "Chocolate", Some(Base { primary: 0x604a43, secondary: 0xcfcfcf, accent: 0xe3a390, error: 0xa34729, slow: 0xcf5f5f, fast: 0x6fa882, mix: 20.0, dark: true })),
+                theme("honey", "Honey", Some(Base { primary: 0xffbf00, secondary: 0x402609, accent: 0x754c22, error: 0xb83d14, slow: 0xcc8b00, fast: 0x8cc64e, mix: 30.0, dark: false })),
+            ];
+            themes
+        })
+    }
+
+    pub fn find(id: &str) -> Option<&'static Theme> {
+        Self::all().iter().find(|t| t.id == id)
+    }
+
+    pub fn get(id: &str) -> &'static Theme {
+        Self::find(id).unwrap_or(&Self::all()[0])
+    }
+}
