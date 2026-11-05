@@ -316,3 +316,39 @@ impl CodePointSet {
         self.weights.get(&cp).copied().unwrap_or(1000)
     }
 }
+
+/// Key combos by code point, in insertion order like a JavaScript `Map`.
+#[derive(Default)]
+struct ComboMap {
+    list: Vec<KeyCombo>,
+    index: HashMap<u32, usize>,
+}
+
+impl ComboMap {
+    fn get(&self, cp: u32) -> Option<&KeyCombo> {
+        self.index.get(&cp).map(|&i| &self.list[i])
+    }
+
+    /// Adds a combo unless a simpler one already types the same character.
+    fn set(&mut self, combo: KeyCombo) {
+        match self.index.get(&combo.cp) {
+            Some(&i) => {
+                if self.list[i].complexity() > combo.complexity() {
+                    self.list[i] = combo;
+                }
+            }
+            None => {
+                self.index.insert(combo.cp, self.list.len());
+                self.list.push(combo);
+            }
+        }
+    }
+}
+
+fn remap_zones(shapes: &mut [KeyShape], remap: &HashMap<KeyId, Vec<String>>) {
+    for shape in shapes {
+        if let Some(zones) = remap.get(&shape.id) {
+            shape.zones = zones.clone();
+        }
+    }
+}
