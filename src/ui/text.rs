@@ -233,3 +233,68 @@ impl TextView<'_> {
         cursor
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::ColorMode;
+    use crate::textinput::{TextInput, TextInputSettings, plain};
+    use crate::theme::Theme;
+
+    fn chars(s: &str) -> Vec<Char> {
+        s.chars()
+            .map(|c| Char {
+                cp: u32::from(c),
+                attr: Attr::Normal,
+                cls: None,
+            })
+            .collect()
+    }
+
+    fn lines(s: &str, width: usize) -> Vec<String> {
+        let c = chars(s);
+        wrap(&c, width)
+            .into_iter()
+            .map(|r| s.chars().skip(r.start).take(r.len()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn wraps_after_spaces() {
+        assert_eq!(lines("aaa bbb ccc", 7), vec!["aaa bbb ", "ccc"]);
+        assert_eq!(lines("aaa bbb ccc", 8), vec!["aaa bbb ", "ccc"]);
+        assert_eq!(lines("aaa bbb ccc", 11), vec!["aaa bbb ccc"]);
+        assert_eq!(lines("aaaaaaaaaa b", 4), vec!["aaaa", "aaaa", "aa b"]);
+        assert_eq!(lines("", 10), vec![""]);
+    }
+
+    #[test]
+    fn renders_attributes_and_caret() {
+        let styles = Styles::new(Theme::get("light"), ColorMode::Truecolor);
+        let mut input = TextInput::new(plain("ab cd"), TextInputSettings::default());
+        input.append_char(0.0, u32::from('a'), 0.0);
+        input.append_char(1.0, u32::from('x'), 0.0);
+        let output = input.output();
+        for (caret, cursor) in [
+            (CaretShape::Line, true),
+            (CaretShape::Block, true),
+            (CaretShape::Underline, true),
+        ] {
+            let view = TextView {
+                chars: &output,
+                styles: &styles,
+                whitespace: WhitespaceStyle::Bullet,
+                caret,
+                rtl: false,
+                typo: false,
+            };
+            let mut buf = Buffer::empty(Rect::new(0, 0, 10, 2));
+            let pos = view.render(buf.area, &mut buf);
+            assert_eq!(pos.is_some(), cursor);
+            assert_eq!(pos.unwrap(), Position::new(1, 0));
+            let row: String = (0..5).map(|x| buf[(x, 0)].symbol().to_string()).collect();
+            assert_eq!(row, "ab·cd");
+            assert_eq!(buf[(0, 0)].fg, styles.hit.fg.unwrap());
+        }
+    }
+}
