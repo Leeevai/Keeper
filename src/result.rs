@@ -80,6 +80,62 @@ impl TypingResult {
             score,
         }
     }
+
+    pub fn from_stats(layout: &str, text_type: TextType, time_stamp: i64, stats: &Stats) -> Self {
+        Self::new(
+            layout,
+            text_type,
+            time_stamp,
+            stats.length,
+            stats.time,
+            stats.errors,
+            stats.histogram.clone(),
+        )
+    }
+
+    /// Results which are too short, too fast or too slow are not saved.
+    pub fn validate(&self) -> bool {
+        self.length >= 10
+            && self.time >= 1000
+            && self.complexity >= 1
+            && self.speed >= 1.0
+            && self.histogram.validate()
+    }
+
+    /// Drops implausible samples so that an otherwise valid result can be kept.
+    pub fn recover(self) -> Option<Self> {
+        if self.validate() {
+            return Some(self);
+        }
+        let histogram = Histogram::new(self.histogram.iter().copied().filter(Sample::is_valid));
+        let recovered = Self::new(
+            self.layout,
+            self.text_type,
+            self.time_stamp,
+            self.length,
+            self.time,
+            self.errors,
+            histogram,
+        );
+        recovered.validate().then_some(recovered)
+    }
+
+    pub fn local_date(&self) -> NaiveDate {
+        local_date(self.time_stamp)
+    }
+
+    pub fn to_record(&self) -> ResultRecord {
+        ResultRecord {
+            layout: self.layout.clone(),
+            text_type: self.text_type,
+            time_stamp: self.time_stamp,
+            length: self.length,
+            time: self.time,
+            errors: self.errors,
+            speed: Some((self.speed * 100.0).round() / 100.0),
+            histogram: self.histogram.iter().copied().collect(),
+        }
+    }
 }
 
 pub fn local_date(time_stamp: i64) -> NaiveDate {
