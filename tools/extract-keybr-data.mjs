@@ -347,3 +347,29 @@ layouts.sort((a, b) => layoutOrder.indexOf(layoutKeyById.get(a.id)) - layoutOrde
 writeJson("keyboard/languages.json", languages.map(({ key, ...rest }) => rest));
 writeJson("keyboard/geometries.json", { geometries, zoneMods: zoneModDicts, layoutMods });
 writeJson("keyboard/layouts.json", layouts);
+
+// ---------------------------------------------------------------------------
+// Phonetic models, blacklists, word lists, books and text normalization.
+
+const modelDir = path.join(PKG, "keybr-phonetic-model", "assets");
+for (const file of fs.readdirSync(modelDir)) {
+  if (file.startsWith("model-") && file.endsWith(".data")) {
+    write(`models/${file}`, fs.readFileSync(path.join(modelDir, file)));
+  }
+}
+
+const blacklistDir = path.join(PKG, "keybr-phonetic-model", "lib", "blacklist");
+for (const file of fs.readdirSync(blacklistDir)) {
+  const m = /^blacklist-(.+)\.json$/.exec(file);
+  if (m != null) {
+    const words = JSON.parse(fs.readFileSync(path.join(blacklistDir, file), "utf8"));
+    if (words.length > 0) writeJson(`blacklist/blacklist-${m[1]}.json`, words);
+  }
+}
+
+const wordsDir = path.join(PKG, "keybr-content-words", "lib", "data");
+for (const file of fs.readdirSync(wordsDir)) {
+  if (file.endsWith(".json")) {
+    writeJson(`words/${file}`, JSON.parse(fs.readFileSync(path.join(wordsDir, file), "utf8")));
+  }
+}
