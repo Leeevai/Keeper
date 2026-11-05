@@ -390,3 +390,52 @@ fn custom_text_is_edited_with_a_paste_and_practiced() {
     assert!(results.contains(r#""textType":"natural""#), "{results}");
     assert!(term.quit());
 }
+
+#[test]
+fn emulates_colemak_on_a_qwerty_system() {
+    use keeper::keyboard::{Keyboard, Layout};
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("settings.json"),
+        r#"{"keyboard.layout": "en-colemak"}"#,
+    )
+    .unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(
+        term.screen().contains("English · Colemak"),
+        "{}",
+        term.screen()
+    );
+    // Press the QWERTY keys found at the positions of the Colemak letters.
+    let colemak = Keyboard::new(Layout::get("en-colemak"), "ansi101", "standard");
+    let qwerty = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+    let lesson = term.box_text();
+    let keys: String = lesson
+        .chars()
+        .map(|c| {
+            let key = colemak
+                .combo(u32::from(c))
+                .expect("a Colemak key")
+                .key
+                .clone();
+            let typed = qwerty.characters(&key)[0]
+                .as_ref()
+                .unwrap()
+                .code_point()
+                .unwrap();
+            char::from_u32(typed).unwrap()
+        })
+        .collect();
+    assert_ne!(keys, lesson);
+    term.type_text(&keys, Duration::from_millis(50));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    let result: serde_json::Value = serde_json::from_str(results.lines().next().unwrap()).unwrap();
+    assert_eq!(result["layout"], "en-colemak");
+    assert_eq!(result["errors"], 0);
+    assert!(term.quit());
+}
