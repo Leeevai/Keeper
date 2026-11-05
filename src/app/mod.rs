@@ -788,4 +788,53 @@ mod tests {
         );
         assert!(app.quit);
     }
+
+    #[test]
+    fn escape_restarts_and_ctrl_n_skips() {
+        let (mut app, _dir) = app();
+        let first = app.practice.input.remaining()[0];
+        app.handle_event(
+            key(
+                KeyCode::Char(char::from_u32(first).unwrap()),
+                KeyModifiers::NONE,
+            ),
+            Instant::now(),
+        );
+        assert_eq!(app.practice.input.pos(), 1);
+        app.handle_event(key(KeyCode::Esc, KeyModifiers::NONE), Instant::now());
+        assert_eq!(app.practice.input.pos(), 0);
+        let text = crate::textinput::flatten(&app.practice.input.text);
+        app.handle_event(
+            key(KeyCode::Char('n'), KeyModifiers::CONTROL),
+            Instant::now(),
+        );
+        assert_ne!(crate::textinput::flatten(&app.practice.input.text), text);
+    }
+
+    #[test]
+    fn redraws_only_while_something_moves() {
+        let (mut app, _dir) = app();
+        let t = Instant::now();
+        assert!(!app.animating(t));
+        let first = app.practice.input.remaining()[0];
+        app.handle_event(
+            key(
+                KeyCode::Char(char::from_u32(first).unwrap()),
+                KeyModifiers::NONE,
+            ),
+            t,
+        );
+        // The key flash fades out.
+        assert!(app.animating(t));
+        assert!(!app.animating(t + std::time::Duration::from_secs(1)));
+        app.notify("hello", app.now_ms(t));
+        assert!(app.animating(t + std::time::Duration::from_secs(1)));
+        assert!(!app.animating(t + std::time::Duration::from_secs(8)));
+        // A running typing test counts down.
+        app.handle_event(key(KeyCode::F(2), KeyModifiers::NONE), t);
+        assert!(!app.animating(t + std::time::Duration::from_secs(8)));
+        let next = app.typing_test.next_char().unwrap();
+        app.handle_event(key(KeyCode::Char(next), KeyModifiers::NONE), t);
+        assert!(app.animating(t + std::time::Duration::from_secs(9)));
+    }
 }
