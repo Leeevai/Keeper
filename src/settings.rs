@@ -638,4 +638,35 @@ impl Settings {
             zones,
         }
     }
+
+    /// Selects a language with its default layout.
+    pub fn set_language(&mut self, id: &str) {
+        let language = Language::get(id);
+        let layout = Layout::select(language);
+        self.language = language.id.clone();
+        self.layout = layout.id.clone();
+        self.geometry = layout.geometries[0].clone();
+        self.zones = d_zones();
+    }
+
+    /// Selects a layout and its first geometry.
+    pub fn set_layout(&mut self, id: &str) {
+        let layout = Layout::get(id);
+        self.layout = layout.id.clone();
+        self.geometry = layout.geometries[0].clone();
+        self.zones = d_zones();
+    }
+
+    pub fn keyboard(&self) -> Keyboard {
+        let o = self.keyboard_options();
+        Keyboard::new(o.layout, &o.geometry.id, &o.zones)
+    }
+
+    pub fn text_input(&self) -> TextInputSettings {
+        TextInputSettings {
+            stop_on_error: self.stop_on_error,
+            forgive_errors: self.forgive_errors,
+            space_skips_words: self.space_skips_words,
+        }
+    }
 }
