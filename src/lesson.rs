@@ -1050,4 +1050,71 @@ mod tests {
         }));
         assert!(flatten(&empty.generate(&keys, &mut Lcg::new(1))).starts_with("? ?"));
     }
+
+    #[test]
+    fn number_lessons() {
+        let mut lesson = Lesson::new(&settings(|s| s.lesson_type = LessonType::Numbers));
+        assert_eq!(lesson.letters().len(), 10);
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+        for word in text.split(' ') {
+            assert!((3..=6).contains(&word.len()), "{text}");
+            assert!(!word.starts_with('0'), "{text}");
+            let bytes = word.as_bytes();
+            assert!(bytes.windows(2).all(|w| w[0] != w[1]), "{text}");
+        }
+    }
+
+    #[test]
+    fn code_lessons() {
+        let mut lesson = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Code;
+            s.code_syntax = "rust".into();
+        }));
+        assert_eq!(lesson.letters()[0].label, "(");
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+        assert!(text.chars().count() > 50, "{text}");
+    }
+
+    #[test]
+    fn results_are_filtered_by_layout_family() {
+        let lesson = Lesson::new(&Settings::default());
+        let mut dvorak = result_at("eniarl", 300.0, 0);
+        dvorak.layout = "en-dvorak".into();
+        let mut uk = result_at("eniarl", 300.0, 1);
+        uk.layout = "en-uk".into();
+        let results = vec![dvorak, uk];
+        let filtered = lesson.filter(&results);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].layout, "en-uk");
+    }
+
+    #[test]
+    fn other_languages_and_layouts() {
+        for (language, layout) in [
+            ("de", "de-de"),
+            ("ru", "ru-ru"),
+            ("fr", "fr-fr"),
+            ("he", "he-il"),
+            ("ja", "ja-jp"),
+        ] {
+            let mut lesson = Lesson::new(&settings(|s| {
+                s.set_language(language);
+                s.set_layout(layout);
+            }));
+            let keys = lesson.update(&lesson.key_stats(&[]));
+            assert_eq!(keys.included().count(), 6, "{language}");
+            let text = flatten(&lesson.generate(&keys, &mut Lcg::new(2)));
+            let allowed: Vec<char> = keys
+                .included()
+                .map(|k| char::from_u32(k.letter.cp).unwrap())
+                .chain([' '])
+                .collect();
+            assert!(
+                text.chars().all(|c| allowed.contains(&c)),
+                "{language}: {text}"
+            );
+        }
+    }
 }
