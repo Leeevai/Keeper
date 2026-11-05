@@ -721,4 +721,71 @@ mod tests {
         assert_eq!(reloaded.results, app.results);
         assert_eq!(reloaded.practice.summary.count, 2);
     }
+
+    #[test]
+    fn renders_the_practice_screen() {
+        let (mut app, _dir) = app();
+        let text = screen_text(&app, 100, 40);
+        assert!(text.contains("Keeper"), "{text}");
+        assert!(
+            text.contains("Metrics:") && text.contains("No lessons yet"),
+            "{text}"
+        );
+        assert!(
+            text.contains("All keys:") && text.contains("E N I A R L"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Guided lessons · English · United States"),
+            "{text}"
+        );
+        assert!(text.contains(" Q   W   E "), "{text}");
+        type_lesson(&mut app, Instant::now());
+        let text = screen_text(&app, 100, 40);
+        assert!(text.contains("Speed:") && text.contains("wpm"), "{text}");
+        // Small terminals drop the keyboard but keep the text.
+        let small = screen_text(&app, 60, 16);
+        assert!(!small.contains(" Q   W   E "), "{small}");
+        assert!(small.contains("Guided lessons"), "{small}");
+    }
+
+    #[test]
+    fn views_and_navigation() {
+        let (mut app, _dir) = app();
+        app.handle_event(
+            key(KeyCode::Char('v'), KeyModifiers::CONTROL),
+            Instant::now(),
+        );
+        assert_eq!(app.settings.view, crate::settings::View::Compact);
+        assert!(!screen_text(&app, 100, 40).contains(" Q   W   E "));
+        app.handle_event(
+            key(KeyCode::Char('v'), KeyModifiers::CONTROL),
+            Instant::now(),
+        );
+        assert!(!screen_text(&app, 100, 40).contains("Metrics:"));
+        // The view is saved.
+        assert_eq!(
+            app.storage.load_settings().view,
+            crate::settings::View::Bare
+        );
+        app.handle_event(key(KeyCode::Tab, KeyModifiers::NONE), Instant::now());
+        assert_eq!(app.screen, Screen::TypingTest);
+        assert!(screen_text(&app, 100, 40).contains("Start typing to begin the test."));
+        app.handle_event(key(KeyCode::BackTab, KeyModifiers::NONE), Instant::now());
+        assert_eq!(app.screen, Screen::Practice);
+        app.handle_event(key(KeyCode::F(3), KeyModifiers::NONE), Instant::now());
+        assert!(screen_text(&app, 100, 40).contains("All Time Statistics"));
+        app.handle_event(key(KeyCode::F(4), KeyModifiers::NONE), Instant::now());
+        assert!(screen_text(&app, 120, 40).contains("Target typing speed"));
+        app.handle_event(key(KeyCode::F(5), KeyModifiers::NONE), Instant::now());
+        assert_eq!(app.screen, Screen::Help);
+        assert!(screen_text(&app, 100, 40).contains("How it works"));
+        app.handle_event(key(KeyCode::Esc, KeyModifiers::NONE), Instant::now());
+        assert_eq!(app.screen, Screen::Practice);
+        app.handle_event(
+            key(KeyCode::Char('q'), KeyModifiers::CONTROL),
+            Instant::now(),
+        );
+        assert!(app.quit);
+    }
 }
