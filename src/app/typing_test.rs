@@ -731,4 +731,34 @@ mod tests {
         let report = test.report.as_ref().expect("the test is over");
         assert_eq!(report.result.length, 40);
     }
+
+    #[test]
+    fn lines_scroll() {
+        let settings = Settings {
+            test_duration: TestDuration::Chars1000,
+            ..Settings::default()
+        };
+        let mut test = TypingTest::with_rng(&settings, Lcg::new(4));
+        let first_lines = test.lines.clone();
+        let n: usize = first_lines[..3].iter().map(|l| l.chars().count()).sum();
+        type_text(&mut test, n, 0.0, 100.0);
+        assert_eq!(test.active, 2);
+        assert_eq!(test.lines[0], first_lines[1]);
+        assert!(test.typed[0].is_some() && test.typed[1].is_some());
+    }
+
+    #[test]
+    fn speed_windows() {
+        let steps: Vec<Step> = (0..21)
+            .map(|i| Step {
+                time_stamp: i as f64 * 200.0,
+                cp: 97,
+                time_to_type: 200.0,
+                typo: false,
+            })
+            .collect();
+        let speeds = speed_series(&steps);
+        assert_eq!(speeds.len(), 2);
+        assert!((speeds[0] - 300.0).abs() < 1e-9);
+    }
 }
