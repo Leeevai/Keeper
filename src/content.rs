@@ -45,3 +45,27 @@ impl Book {
         })
     }
 }
+
+/// The most common words of a language, most frequent first.
+pub fn word_list(language: &str) -> &'static [String] {
+    static CACHE: OnceLock<Mutex<HashMap<String, &'static [String]>>> = OnceLock::new();
+    let mut cache = CACHE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    cache.entry(language.to_string()).or_insert_with(|| {
+        let words: Vec<String> = assets::word_list_json(language)
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
+        Box::leak(words.into_boxed_slice())
+    })
+}
+
+/// Keeps the words made only of the allowed characters.
+pub fn filter_word_list(words: &[String], allowed: impl Fn(u32) -> bool) -> Vec<String> {
+    words
+        .iter()
+        .filter(|w| w.chars().all(|c| allowed(u32::from(c))))
+        .cloned()
+        .collect()
+}
