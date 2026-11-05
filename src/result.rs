@@ -327,3 +327,40 @@ impl KeyStatsMap {
         self.stats.iter()
     }
 }
+
+/// Last, change, minimum, maximum and average of a metric.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Metric {
+    pub last: f64,
+    /// The difference between the last value and the average of the previous ones.
+    pub delta: f64,
+    pub min: f64,
+    pub max: f64,
+    pub avg: f64,
+    count: usize,
+    sum: f64,
+}
+
+impl Metric {
+    pub fn append(&mut self, value: f64) {
+        self.count += 1;
+        if self.count == 1 {
+            *self = Metric {
+                last: value,
+                delta: value,
+                min: value,
+                max: value,
+                avg: value,
+                count: 1,
+                sum: value,
+            };
+        } else {
+            self.last = value;
+            self.delta = value - self.avg;
+            self.sum += value;
+            self.min = self.min.min(value);
+            self.max = self.max.max(value);
+            self.avg = self.sum / self.count as f64;
+        }
+    }
+}
