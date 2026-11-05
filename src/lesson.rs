@@ -54,3 +54,38 @@ impl Target {
             .map(|t| speed_to_time(self.target_speed) / t)
     }
 }
+
+/// A key of a lesson with its learning progress.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LessonKey {
+    pub letter: Letter,
+    pub samples: Vec<KeySample>,
+    pub time_to_type: Option<f64>,
+    pub best_time_to_type: Option<f64>,
+    pub confidence: Option<f64>,
+    pub best_confidence: Option<f64>,
+    pub is_included: bool,
+    pub is_focused: bool,
+    /// Included manually by the alphabet size setting.
+    pub is_forced: bool,
+}
+
+impl LessonKey {
+    fn new(letter: &Letter, stats: &KeyStatsMap, target: &Target) -> Self {
+        let (samples, time_to_type, best_time_to_type) = match stats.get(letter.cp) {
+            Some(s) => (s.samples.clone(), s.time_to_type, s.best_time_to_type),
+            None => (Vec::new(), None, None),
+        };
+        Self {
+            letter: letter.clone(),
+            samples,
+            time_to_type,
+            best_time_to_type,
+            confidence: target.confidence(time_to_type),
+            best_confidence: target.confidence(best_time_to_type),
+            is_included: false,
+            is_focused: false,
+            is_forced: false,
+        }
+    }
+}
