@@ -707,3 +707,32 @@ fn generate_numbers(benford: bool, rng: &mut dyn Rng) -> String {
     }
     words.join(" ")
 }
+
+/// The latest run of lessons without long breaks or slowdowns.
+fn find_session(samples: &[KeySample]) -> &[KeySample] {
+    let n = samples.len();
+    for i in (1..n).rev() {
+        let a = &samples[i - 1];
+        let b = &samples[i];
+        if b.time_stamp - a.time_stamp > 3_600_000 {
+            return &samples[i..];
+        }
+        if b.filtered_time_to_type > a.filtered_time_to_type && n - i + 1 >= 5 {
+            return &samples[i..];
+        }
+    }
+    samples
+}
+
+fn eval(coefficients: &[f64], x: f64) -> f64 {
+    coefficients.iter().rev().fold(0.0, |acc, c| acc * x + c)
+}
+
+fn derivative(coefficients: &[f64]) -> Vec<f64> {
+    coefficients
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(i, c)| c * i as f64)
+        .collect()
+}
