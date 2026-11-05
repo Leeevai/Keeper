@@ -317,6 +317,14 @@ impl CodePointSet {
     }
 }
 
+/// A layout placed on a geometry.
+pub struct Keyboard {
+    pub layout: &'static Layout,
+    pub geometry: &'static Geometry,
+    pub shapes: Vec<KeyShape>,
+    combos: ComboMap,
+}
+
 /// Key combos by code point, in insertion order like a JavaScript `Map`.
 #[derive(Default)]
 struct ComboMap {
@@ -342,6 +350,71 @@ impl ComboMap {
                 self.list.push(combo);
             }
         }
+    }
+}
+
+impl Keyboard {
+    pub fn new(layout: &'static Layout, geometry_id: &str, zones_id: &str) -> Self {
+        let geometry = if layout.geometries.iter().any(|g| g == geometry_id) {
+            Geometry::get(geometry_id)
+        } else {
+            Geometry::get(
+                layout
+                    .geometries
+                    .first()
+                    .map(String::as_str)
+                    .unwrap_or("ansi101"),
+            )
+        };
+        let file = geometries_file();
+        let mut shapes = geometry.keys.clone();
+        match &layout.layout_mod {
+            Some(name) if geometry.form == "staggered" => {
+                if let Some(remap) = file.layout_mods.get(name) {
+                    remap_zones(&mut shapes, remap);
+                }
+            }
+            Some(_) => {}
+            None => {
+                if zones_id != "standard"
+                    && geometry.zones.iter().any(|z| z == zones_id)
+                    && let Some(m) = file.zone_mods.get(zones_id)
+                {
+                    remap_zones(&mut shapes, &m.zones);
+                }
+            }
+        }
+
+        let mut combos = ComboMap::default();
+        for (key, chars) in &layout.chars {
+            for (character, modifier) in chars.iter().zip(Modifier::ALL) {
+                if let Some(Character::CodePoint(cp)) = character {
+                    combos.set(KeyCombo {
+                        cp: *cp,
+                        key: key.clone(),
+                        modifier,
+                        prefix: None,
+                    });
+                }
+            }
+        }
+        for (key, chars) in &layout.chars {
+            for (character, modifier) in chars.iter().zip(Modifier::ALL) {
+                if let Some(Character::Dead { dead }) = character {
+                    add_dead_combos(&mut combos, *dead, key, modifier);
+                }
+            }
+        }
+        Self {
+            layout,
+            geometry,
+            shapes,
+            combos,
+        }
+    }
+
+    pub fn combo(&self, cp: u32) -> Option<&KeyCombo> {
+        self.combos.get(cp)
     }
 }
 
