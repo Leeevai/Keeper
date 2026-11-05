@@ -240,3 +240,62 @@ pub fn key_style(styles: &Styles, included: bool, confidence: Option<f64>) -> St
         (false, _) => styles.dim,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keyboard::Layout;
+    use crate::settings::ColorMode;
+    use crate::theme::Theme;
+
+    fn render(keyboard: &Keyboard, view: KeyboardView, width: u16, height: u16) -> Buffer {
+        let mut buf = Buffer::empty(Rect::new(0, 0, width, height));
+        view.render(buf.area, &mut buf);
+        let _ = keyboard;
+        buf
+    }
+
+    fn text(buf: &Buffer) -> String {
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn renders_the_us_keyboard() {
+        let keyboard = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+        let styles = Styles::new(Theme::get("light"), ColorMode::Truecolor);
+        assert_eq!(KeyboardView::size(&keyboard, true), (59, 9));
+        assert_eq!(KeyboardView::size(&keyboard, false), (59, 5));
+        let buf = render(&keyboard, KeyboardView::new(&keyboard, &styles), 60, 9);
+        let t = text(&buf);
+        assert!(t.contains(" Q   W   E   R   T   Y "), "{t}");
+        assert!(t.contains(" A   S   D   F "), "{t}");
+        assert!(t.contains('⇧') && t.contains('⌫'), "{t}");
+        // Without room for gaps the rows are packed.
+        let packed = text(&render(
+            &keyboard,
+            KeyboardView::new(&keyboard, &styles),
+            60,
+            5,
+        ));
+        assert_eq!(packed.lines().count(), 5);
+        assert!(packed.lines().nth(2).unwrap().contains(" A "));
+        // Too small: nothing is drawn.
+        assert!(
+            text(&render(
+                &keyboard,
+                KeyboardView::new(&keyboard, &styles),
+                30,
+                9
+            ))
+            .trim()
+            .is_empty()
+        );
+    }
+}
