@@ -636,3 +636,68 @@ fn key_frequency(s: &Styles, stats: &KeyStatsMap, area: Rect, buf: &mut Buffer) 
     ]))
     .render(legend, buf);
 }
+
+fn heatmap(
+    s: &Styles,
+    keyboard: &Keyboard,
+    stats: &KeyStatsMap,
+    side_by_side: bool,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let usage = key_usage(stats);
+    let max_hits = usage.iter().map(|u| u.hits).max().unwrap_or(0).max(1) as f64;
+    let max_misses = usage.iter().map(|u| u.misses).max().unwrap_or(0).max(1) as f64;
+    let base = if s.themed {
+        s.palette.background
+    } else {
+        Rgb(40, 40, 40)
+    };
+    let mut hits = HashMap::new();
+    let mut misses = HashMap::new();
+    for u in &usage {
+        if let Some(combo) = keyboard.combo(u.letter.cp) {
+            if u.hits > 0 {
+                let t = (u.hits as f64 / max_hits).sqrt();
+                hits.insert(
+                    combo.key.clone(),
+                    base.lerp(s.palette.chart_hits, 0.2 + 0.8 * t),
+                );
+            }
+            if u.misses > 0 {
+                let t = (u.misses as f64 / max_misses).sqrt();
+                misses.insert(
+                    combo.key.clone(),
+                    base.lerp(s.palette.chart_misses, 0.2 + 0.8 * t),
+                );
+            }
+        }
+    }
+    let (kb_w, kb_h) = KeyboardView::size(keyboard, true);
+    let (a, b) = if side_by_side {
+        let [a, b] =
+            Layout::horizontal([Constraint::Length(kb_w + 2), Constraint::Length(kb_w + 2)])
+                .flex(ratatui::layout::Flex::SpaceAround)
+                .areas(area);
+        (a, b)
+    } else {
+        let [a, b] = Layout::vertical([Constraint::Length(kb_h + 2), Constraint::Length(kb_h + 2)])
+            .areas(area);
+        (a, b)
+    };
+    for (rect, title, colors) in [(a, "Hit count", hits), (b, "Miss count", misses)] {
+        Paragraph::new(Line::from(Span::styled(title, s.value)).centered())
+            .render(Rect { height: 1, ..rect }, buf);
+        let mut view = KeyboardView::new(keyboard, s);
+        view.heat = Some(colors);
+        view.zone_colors = false;
+        view.render(
+            Rect {
+                y: rect.y + 1,
+                height: rect.height.saturating_sub(1),
+                ..rect
+            },
+            buf,
+        );
+    }
+}
