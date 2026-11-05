@@ -665,4 +665,60 @@ mod tests {
         );
         assert_eq!(k(KeyCode::Esc, KeyModifiers::NONE), None);
     }
+
+    #[test]
+    fn altgr_characters_are_typed() {
+        // Windows reports AltGr as Ctrl+Alt.
+        let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+        let k = KeyEvent::new(KeyCode::Char('@'), altgr);
+        assert_eq!(
+            InputAction::from_key(&k),
+            Some(InputAction::Char(u32::from('@')))
+        );
+        let (mut app, _dir) = app();
+        let first = app.practice.input.remaining()[0];
+        app.handle_event(
+            key(
+                KeyCode::Char(char::from_u32(first).unwrap()),
+                KeyModifiers::NONE,
+            ),
+            Instant::now(),
+        );
+        // AltGr+R types a character, it does not restart the lesson.
+        app.handle_event(key(KeyCode::Char('r'), altgr), Instant::now());
+        assert!(app.practice.input.pos() > 0);
+        assert!(!app.quit);
+        app.handle_event(key(KeyCode::Char('q'), altgr), Instant::now());
+        assert!(!app.quit);
+    }
+
+    #[test]
+    fn errors_late_in_the_session_are_shown() {
+        let (mut app, dir) = app();
+        app.start = Instant::now() - std::time::Duration::from_secs(60);
+        // Saving fails when the settings file cannot be replaced.
+        std::fs::create_dir_all(dir.path().join("settings.json").join("x")).unwrap();
+        app.apply_settings(Settings {
+            target_speed: 300,
+            ..app.settings.clone()
+        });
+        let now = app.now_ms(Instant::now());
+        assert!(
+            app.toast(now)
+                .is_some_and(|t| t.starts_with("Could not save the settings"))
+        );
+    }
+
+    #[test]
+    fn completed_lessons_are_saved_and_reloaded() {
+        let (mut app, dir) = app();
+        let t = type_lesson(&mut app, Instant::now());
+        assert_eq!(app.results.len(), 1);
+        type_lesson(&mut app, t + std::time::Duration::from_secs(2));
+        assert_eq!(app.results.len(), 2);
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        let reloaded = App::new(storage).unwrap();
+        assert_eq!(reloaded.results, app.results);
+        assert_eq!(reloaded.practice.summary.count, 2);
+    }
 }
