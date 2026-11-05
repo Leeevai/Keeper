@@ -548,4 +548,46 @@ mod tests {
         }
         assert!(with_focus > 450, "{with_focus}");
     }
+
+    #[test]
+    fn generation_is_deterministic_for_a_seed() {
+        let model = en();
+        let filter = Filter::default();
+        let a: Vec<String> = {
+            let mut r = Lcg::new(5);
+            (0..20).map(|_| model.next_word(&filter, &mut r)).collect()
+        };
+        let b: Vec<String> = {
+            let mut r = Lcg::new(5);
+            (0..20).map(|_| model.next_word(&filter, &mut r)).collect()
+        };
+        assert_eq!(a, b);
+        assert!(a.iter().all(|w| w.chars().count() >= MIN_LENGTH));
+    }
+
+    #[test]
+    fn blacklisted_words_are_never_generated() {
+        let model = en();
+        assert!(!model.blacklist.is_empty());
+        let filter = Filter::default();
+        let mut rng = Lcg::new(3);
+        for _ in 0..2000 {
+            let word = model.next_word(&filter, &mut rng);
+            assert!(!model.blacklist.contains(&word));
+        }
+    }
+
+    #[test]
+    fn unscrambles() {
+        // The scramble places letter i at position (23 * i + 13) % n.
+        let scrambled: String = {
+            let a: Vec<char> = "keeper".chars().collect();
+            let mut s = vec![' '; a.len()];
+            for i in 0..a.len() {
+                s[(SCRAMBLE_X * i + SCRAMBLE_Y) % a.len()] = a[i];
+            }
+            s.into_iter().collect()
+        };
+        assert_eq!(unscramble_word(&scrambled), "keeper");
+    }
 }
