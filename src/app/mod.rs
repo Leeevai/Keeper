@@ -1,5 +1,6 @@
 //! The application: screens, key bindings and the state they share.
 
+pub mod help;
 pub mod practice;
 pub mod profile;
 pub mod settings_view;
