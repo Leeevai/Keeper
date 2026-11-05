@@ -521,3 +521,66 @@ pub fn make_stats(steps: &[Step]) -> Stats {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input(text: &str, settings: TextInputSettings) -> TextInput {
+        TextInput::new(plain(text), settings)
+    }
+
+    /// Types every character of `keys` 100ms apart.
+    fn type_keys(ti: &mut TextInput, keys: &str) -> Vec<Feedback> {
+        let start = ti.steps().last().map_or(0.0, |s| s.time_stamp);
+        keys.chars()
+            .enumerate()
+            .map(|(i, c)| match c {
+                '\u{8}' => ti.clear_char(),
+                _ => ti.append_char(start + (i as f64 + 1.0) * 100.0, u32::from(c), 100.0),
+            })
+            .collect()
+    }
+
+    fn attrs(ti: &TextInput) -> String {
+        ti.output()
+            .iter()
+            .map(|c| match c.attr {
+                Attr::Normal => 'n',
+                Attr::Hit => 'h',
+                Attr::Miss => 'm',
+                Attr::Garbage => 'g',
+                Attr::Cursor => 'c',
+            })
+            .collect()
+    }
+
+    const STOP: TextInputSettings = TextInputSettings {
+        stop_on_error: true,
+        forgive_errors: false,
+        space_skips_words: false,
+    };
+    const NO_STOP: TextInputSettings = TextInputSettings {
+        stop_on_error: false,
+        forgive_errors: false,
+        space_skips_words: false,
+    };
+    const FORGIVE: TextInputSettings = TextInputSettings {
+        stop_on_error: true,
+        forgive_errors: true,
+        space_skips_words: false,
+    };
+
+    #[test]
+    fn types_text_without_errors() {
+        let mut ti = input("abc", STOP);
+        assert_eq!(attrs(&ti), "cnn");
+        assert_eq!(type_keys(&mut ti, "abc"), vec![Feedback::Succeeded; 3]);
+        assert!(ti.completed());
+        assert_eq!(attrs(&ti), "hhh");
+        assert_eq!(
+            ti.append_char(1000.0, u32::from('x'), 1.0),
+            Feedback::Failed
+        );
+    }
+}
