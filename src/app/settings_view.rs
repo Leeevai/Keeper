@@ -827,4 +827,86 @@ impl SettingsView {
             _ => SettingsAction::None,
         }
     }
+
+    pub fn handle_paste(&mut self, text: &str) {
+        if let Some(editor) = &mut self.editor {
+            editor.insert(text);
+        }
+    }
+
+    fn lesson_preview(&self, settings: &Settings, results: &[TypingResult]) -> String {
+        let mut cache = self.preview.borrow_mut();
+        if let Some((s, text)) = cache.as_ref()
+            && s == settings
+        {
+            return text.clone();
+        }
+        let mut lesson = Lesson::new(settings);
+        let keys = lesson.update(&lesson.key_stats(results));
+        let text = flatten(&lesson.generate(&keys, &mut Lcg::new(42)));
+        *cache = Some((settings.clone(), text.clone()));
+        text
+    }
+
+    fn render_editor(&self, frame: &mut Frame, area: Rect, ctx: &RenderContext, editor: &Editor) {
+        let s = ctx.styles;
+        let rect = crate::ui::centered(area, 80, area.height.saturating_sub(4).min(24));
+        frame.render_widget(Clear, rect);
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(s.accent)
+            .style(s.base)
+            .title(Span::styled(" Custom text ", s.title))
+            .title_bottom(Span::styled(
+                " Ctrl+S save · Esc cancel · Ctrl+U clear · paste with your terminal ",
+                s.name,
+            ));
+        let inner = block.inner(rect);
+        frame.render_widget(block, rect);
+        let inner = Rect {
+            x: inner.x + 1,
+            width: inner.width.saturating_sub(2),
+            ..inner
+        };
+        // Wrap by characters to keep the cursor position simple.
+        let width = inner.width.max(1) as usize;
+        let mut rows: Vec<String> = vec![String::new()];
+        let mut cursor = (0usize, 0usize);
+        for (i, c) in editor.text.iter().enumerate() {
+            if i == editor.cursor {
+                cursor = (rows.len() - 1, rows.last().map_or(0, |r| r.chars().count()));
+            }
+            if *c == '\n' {
+                rows.push(String::new());
+                continue;
+            }
+            if rows.last().is_some_and(|r| r.chars().count() >= width) {
+                rows.push(String::new());
+            }
+            rows.last_mut().expect("a row").push(*c);
+        }
+        if editor.cursor >= editor.text.len() {
+            let last = rows.len() - 1;
+            let col = rows[last].chars().count();
+            cursor = if col >= width {
+                (last + 1, 0)
+            } else {
+                (last, col)
+            };
+        }
+        let height = inner.height as usize;
+        let scroll = cursor.0.saturating_sub(height.saturating_sub(1));
+        let lines: Vec<Line> = rows
+            .iter()
+            .skip(scroll)
+            .take(height)
+            .map(|r| Line::from(Span::styled(r.clone(), s.text)))
+            .collect();
+        frame.render_widget(Paragraph::new(lines), inner);
+        frame.set_cursor_position(Position::new(
+            inner.x + cursor.1 as u16,
+            inner.y + (cursor.0 - scroll) as u16,
+        ));
+    }
 }
