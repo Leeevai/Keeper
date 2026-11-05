@@ -376,3 +376,36 @@ fn clean_text(
         filtered
     }
 }
+
+fn generate_numbers(benford: bool, rng: &mut dyn Rng) -> String {
+    let digits = Letter::digits();
+    let non_zero = &digits[1..];
+    let mut words = Vec::new();
+    let mut words_length = 0;
+    while words_length < 50 {
+        let length = (3.0 + rng.next_f64() * 4.0).floor() as usize;
+        let mut word = String::new();
+        let mut last = None;
+        for i in 0..length {
+            loop {
+                let digit = if i == 0 {
+                    if benford {
+                        weighted_random_sample(non_zero, |l| l.f, rng)
+                    } else {
+                        random_sample(non_zero, rng)
+                    }
+                } else {
+                    random_sample(&digits, rng)
+                };
+                if Some(digit.cp) != last {
+                    word.push(char::from_u32(digit.cp).unwrap_or('0'));
+                    last = Some(digit.cp);
+                    break;
+                }
+            }
+        }
+        words_length += word.len();
+        words.push(word);
+    }
+    words.join(" ")
+}
