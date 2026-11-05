@@ -731,4 +731,33 @@ mod tests {
         assert_eq!(s.book, "en-alice-wonderland");
         assert_eq!(s.theme, "system");
     }
+
+    #[test]
+    fn keyboard_options_stay_compatible() {
+        let mut s = Settings::default();
+        s.set_language("de");
+        assert_eq!(s.keyboard_options().layout.id, "de-de");
+        // A Latin layout of another language is allowed.
+        s.layout = "en-colemak".into();
+        assert_eq!(s.keyboard_options().layout.id, "en-colemak");
+        // A Cyrillic layout is not.
+        s.layout = "ru-ru".into();
+        assert_eq!(s.keyboard_options().layout.id, "de-de");
+        // Unsupported geometries fall back to the first one.
+        s.layout = "en-colemak-dh-matrix".into();
+        s.geometry = "ansi101".into();
+        assert_eq!(s.keyboard_options().geometry.id, "matrix");
+        // Zones cannot be changed for layouts with their own zones.
+        s.layout = "en-colemak-dh".into();
+        s.zones = "symmetric".into();
+        assert_eq!(s.keyboard_options().zones, "standard");
+    }
+
+    #[test]
+    fn speed_units() {
+        assert_eq!(SpeedUnit::Wpm.format(250.0), "50.0wpm");
+        assert_eq!(SpeedUnit::Cps.format(300.0), "5.00cps");
+        assert_eq!(SpeedUnit::Wps.format(300.0), "1.00wps");
+        assert_eq!(SpeedUnit::Cpm.format(123.45), "123.5cpm");
+    }
 }
