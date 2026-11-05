@@ -292,3 +292,51 @@ impl View {
         }
     }
 }
+
+/// Terminal color support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorMode {
+    #[default]
+    Auto,
+    Truecolor,
+    #[serde(rename = "256")]
+    Ansi256,
+}
+
+impl ColorMode {
+    pub const ALL: [ColorMode; 3] = [ColorMode::Auto, ColorMode::Truecolor, ColorMode::Ansi256];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            ColorMode::Auto => "Detect",
+            ColorMode::Truecolor => "24-bit color",
+            ColorMode::Ansi256 => "256 colors",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum TestSource {
+    #[default]
+    CommonWords,
+    PseudoWords,
+    Book,
+}
+
+impl TestSource {
+    pub const ALL: [TestSource; 3] = [
+        TestSource::CommonWords,
+        TestSource::PseudoWords,
+        TestSource::Book,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TestSource::CommonWords => "Common words",
+            TestSource::PseudoWords => "Pseudo words",
+            TestSource::Book => "Book",
+        }
+    }
+}
