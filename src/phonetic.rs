@@ -159,3 +159,53 @@ impl Letter {
             .collect()
     }
 }
+
+/// Restricts the letters from which words are generated.
+#[derive(Debug, Clone, Default)]
+pub struct Filter {
+    /// Code points of the letters from which to generate words, `None` allows everything.
+    pub code_points: Option<HashSet<u32>>,
+    /// The letter which must appear in each generated word.
+    pub focused: Option<u32>,
+}
+
+impl Filter {
+    pub fn new(letters: &[u32], focused: Option<u32>) -> Self {
+        Self {
+            code_points: Some(letters.iter().copied().collect()),
+            focused,
+        }
+    }
+
+    pub fn includes(&self, cp: u32) -> bool {
+        self.code_points
+            .as_ref()
+            .is_none_or(|set| set.contains(&cp))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Entry {
+    pub cp: u32,
+    pub frequency: u8,
+}
+
+struct Reader<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl Reader<'_> {
+    fn u8(&mut self) -> Result<u8> {
+        let v = *self
+            .data
+            .get(self.pos)
+            .ok_or_else(|| anyhow::anyhow!("unexpected end of model"))?;
+        self.pos += 1;
+        Ok(v)
+    }
+
+    fn u16(&mut self) -> Result<u16> {
+        Ok(u16::from_be_bytes([self.u8()?, self.u8()?]))
+    }
+}
