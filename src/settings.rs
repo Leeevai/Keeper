@@ -51,3 +51,63 @@ impl LessonType {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SpeedUnit {
+    #[default]
+    Wpm,
+    Wps,
+    Cpm,
+    Cps,
+}
+
+impl SpeedUnit {
+    pub const ALL: [SpeedUnit; 4] = [
+        SpeedUnit::Wpm,
+        SpeedUnit::Wps,
+        SpeedUnit::Cpm,
+        SpeedUnit::Cps,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            SpeedUnit::Wpm => "wpm",
+            SpeedUnit::Wps => "wps",
+            SpeedUnit::Cpm => "cpm",
+            SpeedUnit::Cps => "cps",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            SpeedUnit::Wpm => "Words per minute",
+            SpeedUnit::Wps => "Words per second",
+            SpeedUnit::Cpm => "Characters per minute",
+            SpeedUnit::Cps => "Characters per second",
+        }
+    }
+
+    /// Converts characters per minute into this unit.
+    pub fn measure(self, cpm: f64) -> f64 {
+        match self {
+            SpeedUnit::Wpm => cpm / 5.0,
+            SpeedUnit::Wps => cpm / 300.0,
+            SpeedUnit::Cpm => cpm,
+            SpeedUnit::Cps => cpm / 60.0,
+        }
+    }
+
+    /// Formats a speed given in characters per minute, e.g. `42.5wpm`.
+    pub fn format(self, cpm: f64) -> String {
+        format!("{}{}", self.format_value(cpm), self.id())
+    }
+
+    pub fn format_value(self, cpm: f64) -> String {
+        let v = self.measure(cpm);
+        match self {
+            SpeedUnit::Wpm | SpeedUnit::Cpm => format!("{v:.1}"),
+            SpeedUnit::Wps | SpeedUnit::Cps => format!("{v:.2}"),
+        }
+    }
+}
