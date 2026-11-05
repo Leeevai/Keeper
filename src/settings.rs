@@ -239,3 +239,56 @@ impl SoundTheme {
         }
     }
 }
+
+/// How typed characters are mapped to the practiced layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Emulation {
+    /// Characters are used as typed.
+    None,
+    /// Keys typed on the system layout are translated into the practiced layout.
+    #[default]
+    Forward,
+    /// The keyboard hardware already emulates the layout.
+    Reverse,
+}
+
+impl Emulation {
+    pub const ALL: [Emulation; 3] = [Emulation::None, Emulation::Forward, Emulation::Reverse];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Emulation::None => "Off",
+            Emulation::Forward => "Emulate layout",
+            Emulation::Reverse => "Keyboard hardware emulates layout",
+        }
+    }
+}
+
+/// How much of the practice screen is shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum View {
+    #[default]
+    Normal,
+    Compact,
+    Bare,
+}
+
+impl View {
+    pub fn next(self) -> View {
+        match self {
+            View::Normal => View::Compact,
+            View::Compact => View::Bare,
+            View::Bare => View::Normal,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            View::Normal => "Normal",
+            View::Compact => "Compact",
+            View::Bare => "Bare",
+        }
+    }
+}
