@@ -3,6 +3,7 @@
 pub mod practice;
 pub mod profile;
 pub mod settings_view;
+pub mod typing_test;
 
 use std::time::Instant;
 
