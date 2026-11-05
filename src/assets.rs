@@ -70,3 +70,26 @@ pub fn book_json(id: &str) -> Option<&'static str> {
         _ => None,
     }
 }
+
+/// Returns the rules of a code grammar.
+pub fn grammar_json(name: &str) -> Option<&'static str> {
+    match name {
+        "_comments" => Some(include_str!("../assets/code/_comments.json")),
+        "_ident" => Some(include_str!("../assets/code/_ident.json")),
+        "_keywords" => Some(include_str!("../assets/code/_keywords.json")),
+        "_literals" => Some(include_str!("../assets/code/_literals.json")),
+        "lang_cpp" => Some(include_str!("../assets/code/lang_cpp.json")),
+        "lang_csharp" => Some(include_str!("../assets/code/lang_csharp.json")),
+        "lang_go" => Some(include_str!("../assets/code/lang_go.json")),
+        "lang_html_css" => Some(include_str!("../assets/code/lang_html_css.json")),
+        "lang_java" => Some(include_str!("../assets/code/lang_java.json")),
+        "lang_javascript" => Some(include_str!("../assets/code/lang_javascript.json")),
+        "lang_php" => Some(include_str!("../assets/code/lang_php.json")),
+        "lang_python" => Some(include_str!("../assets/code/lang_python.json")),
+        "lang_regex" => Some(include_str!("../assets/code/lang_regex.json")),
+        "lang_rust" => Some(include_str!("../assets/code/lang_rust.json")),
+        "lang_shell" => Some(include_str!("../assets/code/lang_shell.json")),
+        "lang_typescript" => Some(include_str!("../assets/code/lang_typescript.json")),
+        _ => None,
+    }
+}
