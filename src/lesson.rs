@@ -899,4 +899,50 @@ mod tests {
         assert!(focused.confidence.is_none());
         assert!(!"ENIARL".contains(&focused.letter.label));
     }
+
+    #[test]
+    fn recover_keys_requires_current_speed() {
+        let results = vec![result_at("eniarl", 300.0, 0), result_at("eniarl", 20.0, 1)];
+        let plain = Lesson::new(&Settings::default());
+        let keys = plain.update(&plain.key_stats(&results));
+        assert_eq!(keys.included().count(), 7);
+        let recover = Lesson::new(&settings(|s| s.recover_keys = true));
+        let keys = recover.update(&recover.key_stats(&results));
+        assert_eq!(keys.included().count(), 6);
+    }
+
+    #[test]
+    fn alphabet_size_forces_letters() {
+        let lesson = Lesson::new(&settings(|s| s.alphabet_size = 1.0));
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        assert_eq!(keys.included().count(), lesson.letters().len());
+        assert_eq!(keys.iter().filter(|k| k.is_forced).count(), 20);
+    }
+
+    #[test]
+    fn keyboard_order_puts_the_home_row_first() {
+        let lesson = Lesson::new(&settings(|s| s.keyboard_order = true));
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        let included = labels(keys.included());
+        assert!(
+            included.chars().all(|c| "ASDFGHJKL".contains(c)),
+            "{included}"
+        );
+    }
+
+    #[test]
+    fn guided_text_uses_only_included_letters() {
+        for natural in [true, false] {
+            let mut lesson = Lesson::new(&settings(|s| s.natural_words = natural));
+            let keys = lesson.update(&lesson.key_stats(&[]));
+            let mut rng = Lcg::new(9);
+            for _ in 0..20 {
+                let text = flatten(&lesson.generate(&keys, &mut rng));
+                assert!(text.chars().all(|c| "eniarl ".contains(c)), "{text}");
+                let letters: usize = text.split(' ').map(|w| w.chars().count()).sum();
+                assert!((100..120).contains(&letters), "{text}");
+                assert!(text.split(' ').all(|w| w.contains('e')), "{text}");
+            }
+        }
+    }
 }
