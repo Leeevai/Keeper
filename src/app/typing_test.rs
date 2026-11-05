@@ -197,6 +197,19 @@ impl TypingTest {
         Some(feedback)
     }
 
+    /// Ends a timed test when its time is up.
+    pub fn tick(&mut self, now: f64) -> bool {
+        if self.report.is_none()
+            && self.started()
+            && self.duration.time().is_some()
+            && self.progress(now) >= 1.0
+        {
+            self.finish();
+            return true;
+        }
+        false
+    }
+
     fn next_line(&mut self) {
         self.steps.extend(self.input.steps());
         self.typed[self.active] = Some(self.input.output());
