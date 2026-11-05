@@ -38,3 +38,45 @@ pub fn combine_diacritic(base: u32, combining: u32) -> u32 {
         _ => base,
     }
 }
+
+pub fn to_code_points(s: &str) -> Vec<u32> {
+    s.chars().map(u32::from).collect()
+}
+
+pub fn from_code_points(cps: &[u32]) -> String {
+    cps.iter().filter_map(|&cp| char::from_u32(cp)).collect()
+}
+
+pub fn cp_to_string(cp: u32) -> String {
+    char::from_u32(cp).map(String::from).unwrap_or_default()
+}
+
+struct NormalizeTables {
+    expand: HashMap<u32, Vec<u32>>,
+    replace: HashMap<u32, u32>,
+}
+
+fn tables() -> &'static NormalizeTables {
+    static TABLES: OnceLock<NormalizeTables> = OnceLock::new();
+    TABLES.get_or_init(|| {
+        #[derive(serde::Deserialize)]
+        struct Raw {
+            expand: Vec<(Vec<u32>, Vec<u32>)>,
+            replace: Vec<(u32, Vec<u32>)>,
+        }
+        let raw: Raw = serde_json::from_str(assets::NORMALIZE_JSON).expect("normalize.json");
+        let mut expand = HashMap::new();
+        for (to, from) in raw.expand {
+            for cp in from {
+                expand.insert(cp, to.clone());
+            }
+        }
+        let mut replace = HashMap::new();
+        for (to, from) in raw.replace {
+            for cp in from {
+                replace.insert(cp, to);
+            }
+        }
+        NormalizeTables { expand, replace }
+    })
+}
