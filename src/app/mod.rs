@@ -22,6 +22,7 @@ use crate::theme::Theme;
 use crate::ui::Styles;
 use practice::Practice;
 use profile::{Profile, ProfileAction};
+use settings_view::{SettingsAction, SettingsView};
 
 /// What a key press does to the text being typed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

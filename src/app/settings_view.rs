@@ -711,4 +711,24 @@ impl Editor {
         }
         None
     }
+
+    pub fn text(&self) -> String {
+        self.text.iter().collect()
+    }
+}
+
+/// What the settings screen asks the app to do.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SettingsAction {
+    None,
+    Back,
+    Apply(Box<Settings>),
+}
+
+#[derive(Default)]
+pub struct SettingsView {
+    pub selected: usize,
+    pub editor: Option<Editor>,
+    pub confirm_reset: bool,
+    preview: RefCell<Option<(Settings, String)>>,
 }
