@@ -206,6 +206,42 @@ impl App {
         }
     }
 
+    fn typing_test_key(&mut self, key: KeyEvent, at: Instant) {
+        let ctrl = is_ctrl(&key);
+        let now = self.now_ms(at);
+        if self.typing_test.report.is_some() {
+            if matches!(key.code, KeyCode::Enter | KeyCode::Esc) {
+                self.typing_test = TypingTest::new(&self.settings);
+            }
+            return;
+        }
+        match key.code {
+            KeyCode::Esc => self.typing_test = TypingTest::new(&self.settings),
+            KeyCode::Char('d') if ctrl => {
+                let mut s = self.settings.clone();
+                settings_view::Field::TestDuration.change(&mut s, 1);
+                self.apply_settings(s);
+                self.typing_test = TypingTest::new(&self.settings);
+            }
+            KeyCode::Char('t') if ctrl => {
+                let mut s = self.settings.clone();
+                settings_view::Field::TestSource.change(&mut s, 1);
+                self.apply_settings(s);
+                self.typing_test = TypingTest::new(&self.settings);
+            }
+            _ => {
+                if let Some(action) = InputAction::from_key(&key) {
+                    if let Some(feedback) = self.typing_test.handle(action, now) {
+                        self.play(feedback);
+                    }
+                    if self.typing_test.report.is_some() {
+                        self.save_test(now);
+                    }
+                }
+            }
+        }
+    }
+
     fn play(&mut self, feedback: crate::textinput::Feedback) {
         let s = &self.settings;
         self.sounds
@@ -275,6 +311,42 @@ impl App {
             }
         }
         self.practice.next_lesson();
+    }
+
+    fn profile_key(&mut self, key: KeyEvent, at: Instant) {
+        let now = self.now_ms(at);
+        match self.profile.handle_key(key, &self.results) {
+            ProfileAction::None => {}
+            ProfileAction::Back => self.screen = Screen::Practice,
+            ProfileAction::Export => {
+                let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+                let dir = dirs::download_dir().unwrap_or_else(|| self.storage.dir().to_path_buf());
+                let path = dir.join(format!("keeper-results-{stamp}.json"));
+                match self.storage.export_results(&self.results, &path) {
+                    Ok(()) => self.notify(
+                        format!(
+                            "Exported {} results to {}",
+                            self.results.len(),
+                            short_path(&path)
+                        ),
+                        now,
+                    ),
+                    Err(e) => self.notify(format!("Export failed: {e}"), now),
+                }
+            }
+            ProfileAction::Reset => match self.storage.reset_results() {
+                Ok(backup) => {
+                    self.results.clear();
+                    self.practice = Practice::new(&self.settings, &self.results);
+                    self.profile = Profile::default();
+                    let kept = backup
+                        .map(|b| format!(", the old results are in {}", short_path(&b)))
+                        .unwrap_or_default();
+                    self.notify(format!("Statistics reset{kept}"), now);
+                }
+                Err(e) => self.notify(format!("Reset failed: {e}"), now),
+            },
+        }
     }
 }
 
