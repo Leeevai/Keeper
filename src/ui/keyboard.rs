@@ -231,3 +231,12 @@ impl Widget for KeyboardView<'_> {
         }
     }
 }
+
+/// The style of a key label in the list of lesson keys.
+pub fn key_style(styles: &Styles, included: bool, confidence: Option<f64>) -> Style {
+    match (included, confidence) {
+        (true, Some(c)) => styles.on(styles.confidence_rgb(c)),
+        (true, None) => styles.text,
+        (false, _) => styles.dim,
+    }
+}
