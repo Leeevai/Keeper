@@ -1217,4 +1217,62 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn keys_change_values() {
+        let mut view = SettingsView::default();
+        let mut s = Settings::default();
+        select(&mut view, &s, Field::TargetSpeed);
+        press(&mut view, &mut s, KeyCode::Right);
+        assert_eq!(s.target_speed, 180);
+        assert_eq!(Field::TargetSpeed.value(&s), "36.0wpm");
+        // Shift changes by ten steps.
+        let action = view.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT), &s);
+        let SettingsAction::Apply(slower) = action else {
+            panic!("expected apply")
+        };
+        assert_eq!(slower.target_speed, 130);
+        select(&mut view, &s, Field::NaturalWords);
+        press(&mut view, &mut s, KeyCode::Enter);
+        assert!(!s.natural_words);
+        select(&mut view, &s, Field::Theme);
+        press(&mut view, &mut s, KeyCode::Right);
+        assert_eq!(s.theme, "light");
+        press(&mut view, &mut s, KeyCode::Left);
+        press(&mut view, &mut s, KeyCode::Left);
+        assert_eq!(s.theme, "honey");
+        select(&mut view, &s, Field::DailyGoal);
+        for _ in 0..10 {
+            press(&mut view, &mut s, KeyCode::Left);
+        }
+        assert_eq!(Field::DailyGoal.value(&s), "Not set");
+        select(&mut view, &s, Field::Language);
+        press(&mut view, &mut s, KeyCode::Right);
+        assert_eq!(s.language, "en-GB");
+        // There is no British layout of its own, the first Latin layout is used.
+        assert_eq!(
+            s.layout,
+            KeyboardLayout::select(crate::language::Language::get("en-GB")).id
+        );
+        assert_eq!(press(&mut view, &mut s, KeyCode::Esc), SettingsAction::Back);
+    }
+
+    #[test]
+    fn page_keys_jump_between_sections() {
+        let mut view = SettingsView::default();
+        let mut s = Settings::default();
+        press(&mut view, &mut s, KeyCode::PageDown);
+        assert_eq!(
+            fields(&s)[view.selected],
+            (Section::Typing, Field::StopOnError)
+        );
+        press(&mut view, &mut s, KeyCode::Down);
+        press(&mut view, &mut s, KeyCode::PageUp);
+        assert_eq!(fields(&s)[view.selected].1, Field::StopOnError);
+        press(&mut view, &mut s, KeyCode::PageUp);
+        assert_eq!(view.selected, 0);
+        press(&mut view, &mut s, KeyCode::End);
+        press(&mut view, &mut s, KeyCode::PageDown);
+        assert_eq!(view.selected, fields(&s).len() - 1);
+    }
 }
