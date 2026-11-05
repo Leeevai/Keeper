@@ -340,3 +340,58 @@ impl TestSource {
         }
     }
 }
+
+/// The length of a typing test, by time or by characters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum TestDuration {
+    #[default]
+    Seconds15,
+    Seconds30,
+    Seconds60,
+    Chars100,
+    Chars500,
+    Chars1000,
+}
+
+impl TestDuration {
+    pub const ALL: [TestDuration; 6] = [
+        TestDuration::Seconds15,
+        TestDuration::Seconds30,
+        TestDuration::Seconds60,
+        TestDuration::Chars100,
+        TestDuration::Chars500,
+        TestDuration::Chars1000,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TestDuration::Seconds15 => "15 seconds",
+            TestDuration::Seconds30 => "30 seconds",
+            TestDuration::Seconds60 => "one minute",
+            TestDuration::Chars100 => "100 characters",
+            TestDuration::Chars500 => "500 characters",
+            TestDuration::Chars1000 => "1000 characters",
+        }
+    }
+
+    /// Milliseconds for timed tests.
+    pub fn time(self) -> Option<f64> {
+        match self {
+            TestDuration::Seconds15 => Some(15_000.0),
+            TestDuration::Seconds30 => Some(30_000.0),
+            TestDuration::Seconds60 => Some(60_000.0),
+            _ => None,
+        }
+    }
+
+    /// Characters for tests of a fixed length.
+    pub fn length(self) -> Option<usize> {
+        match self {
+            TestDuration::Chars100 => Some(100),
+            TestDuration::Chars500 => Some(500),
+            TestDuration::Chars1000 => Some(1000),
+            _ => None,
+        }
+    }
+}
