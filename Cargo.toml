@@ -10,6 +10,7 @@ default-run = "keeper"
 
 [dependencies]
 anyhow = "1"
+clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "6"
 ratatui = "0.30"
