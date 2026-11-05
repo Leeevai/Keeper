@@ -172,3 +172,39 @@ impl WhitespaceStyle {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaySounds {
+    #[default]
+    None,
+    ErrorsOnly,
+    All,
+    KeysOnly,
+}
+
+impl PlaySounds {
+    pub const ALL: [PlaySounds; 4] = [
+        PlaySounds::None,
+        PlaySounds::ErrorsOnly,
+        PlaySounds::All,
+        PlaySounds::KeysOnly,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            PlaySounds::None => "No sounds",
+            PlaySounds::ErrorsOnly => "Error sounds only",
+            PlaySounds::All => "All sounds",
+            PlaySounds::KeysOnly => "Key sounds only",
+        }
+    }
+
+    pub fn keys(self) -> bool {
+        matches!(self, PlaySounds::All | PlaySounds::KeysOnly)
+    }
+
+    pub fn errors(self) -> bool {
+        matches!(self, PlaySounds::All | PlaySounds::ErrorsOnly)
+    }
+}
