@@ -65,3 +65,78 @@ impl Default for Profile {
 }
 
 const WIDTH: u16 = 112;
+
+/// A titled block of the page: its title, height and how to draw it.
+type Section<'a> = (String, u16, Box<dyn Fn(Rect, &mut Buffer) + 'a>);
+
+/// Layouts that have results, most used first.
+fn layouts_in(results: &[TypingResult]) -> Vec<String> {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for r in results {
+        *counts.entry(r.layout.as_str()).or_default() += 1;
+    }
+    let mut layouts: Vec<(&str, usize)> = counts.into_iter().collect();
+    layouts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    layouts.into_iter().map(|(l, _)| l.to_string()).collect()
+}
+
+fn summary<'a>(
+    s: &Styles,
+    unit: SpeedUnit,
+    title: &'a str,
+    stats: &SummaryStats,
+    goal: Option<crate::result::DailyGoal>,
+) -> Paragraph<'a> {
+    let row = |name: &str, value: String| {
+        Line::from(vec![
+            Span::styled(format!("{name:<18}"), s.name),
+            Span::styled(value, s.value),
+        ])
+    };
+    let none = || "-".to_string();
+    let has = stats.count > 0;
+    let mut lines = vec![
+        Line::from(Span::styled(title, s.text.add_modifier(Modifier::BOLD))),
+        row("Lessons", thousands(stats.count as f64)),
+        row("Time", format_duration(stats.time)),
+        row(
+            "Top speed",
+            if has {
+                unit.format(stats.speed.max)
+            } else {
+                none()
+            },
+        ),
+        row(
+            "Average speed",
+            if has {
+                unit.format(stats.speed.avg)
+            } else {
+                none()
+            },
+        ),
+        row(
+            "Top accuracy",
+            if has {
+                format!("{:.1}%", stats.accuracy.max * 100.0)
+            } else {
+                none()
+            },
+        ),
+        row(
+            "Average accuracy",
+            if has {
+                format!("{:.1}%", stats.accuracy.avg * 100.0)
+            } else {
+                none()
+            },
+        ),
+    ];
+    if let Some(goal) = goal {
+        lines.push(row(
+            "Daily goal",
+            format!("{:.0}% of {} minutes", goal.value * 100.0, goal.goal),
+        ));
+    }
+    Paragraph::new(lines)
+}
