@@ -837,4 +837,71 @@ mod tests {
         app.handle_event(key(KeyCode::Char(next), KeyModifiers::NONE), t);
         assert!(app.animating(t + std::time::Duration::from_secs(9)));
     }
+
+    #[test]
+    fn every_screen_renders_at_any_size() {
+        let (mut app, _dir) = app();
+        type_lesson(&mut app, Instant::now());
+        for screen in Screen::ALL {
+            app.screen = screen;
+            for (w, h) in [
+                (1, 1),
+                (10, 3),
+                (20, 6),
+                (40, 10),
+                (60, 16),
+                (80, 24),
+                (120, 40),
+                (220, 70),
+            ] {
+                let _ = screen_text(&app, w, h);
+            }
+        }
+        // With dialogs and the editor open too.
+        app.screen = Screen::Settings;
+        app.settings_view.confirm_reset = true;
+        let _ = screen_text(&app, 30, 8);
+        app.settings_view.confirm_reset = false;
+        app.settings_view.editor = Some(settings_view::Editor::new("some text\nmore"));
+        let _ = screen_text(&app, 30, 8);
+        let _ = screen_text(&app, 100, 30);
+        app.screen = Screen::Profile;
+        app.profile.confirm_reset = true;
+        let _ = screen_text(&app, 30, 8);
+    }
+
+    #[test]
+    fn practices_every_language_and_lesson_type() {
+        let (mut app, _dir) = app();
+        for language in crate::language::Language::all() {
+            let mut s = app.settings.clone();
+            s.set_language(&language.id);
+            app.apply_settings(s);
+            let text = screen_text(&app, 120, 40);
+            assert!(
+                text.contains(&format!("· {} · ", language.name)),
+                "{}:\n{text}",
+                language.id
+            );
+            assert!(app.practice.input.len() > 20, "{}", language.id);
+        }
+        let mut s = app.settings.clone();
+        s.set_language("en");
+        app.apply_settings(s);
+        for lesson_type in crate::settings::LessonType::ALL {
+            let s = Settings {
+                lesson_type,
+                ..app.settings.clone()
+            };
+            app.apply_settings(s);
+            let text = screen_text(&app, 120, 40);
+            assert!(
+                text.contains(lesson_type.name()),
+                "{lesson_type:?}:\n{text}"
+            );
+            type_lesson(&mut app, Instant::now());
+        }
+        // Every lesson type produced a saved result.
+        assert_eq!(app.results.len(), crate::settings::LessonType::ALL.len());
+    }
 }
