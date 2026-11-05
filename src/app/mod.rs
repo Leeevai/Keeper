@@ -456,6 +456,96 @@ impl App {
             _ => false,
         }
     }
+
+    pub fn render(&self, frame: &mut Frame, at: Instant) {
+        let area = frame.area();
+        frame.render_widget(Block::new().style(self.styles.base), area);
+        let [tabs, body, status] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
+        .areas(area);
+        self.render_tabs(frame, tabs);
+        let now = self.now_ms(at);
+        let ctx = RenderContext {
+            styles: &self.styles,
+            settings: &self.settings,
+            daily_goal: self.daily_goal(),
+            toast: self.toast(now),
+            now,
+            focused: true,
+            data_dir: self.storage.dir().to_path_buf(),
+        };
+        let body = Rect {
+            y: body.y + 1,
+            height: body.height.saturating_sub(1),
+            ..body
+        };
+        let hints = match self.screen {
+            Screen::Practice => {
+                self.practice.render(frame, body, &ctx);
+                "Esc restart · Ctrl+N new lesson · Ctrl+V view · Tab next screen · Ctrl+Q quit"
+            }
+            Screen::TypingTest => {
+                self.typing_test.render(frame, body, &ctx, &self.tests);
+                "Esc new test · Ctrl+D test length · Ctrl+T text · Tab next screen · Ctrl+Q quit"
+            }
+            Screen::Profile => {
+                self.profile.render(frame, body, &ctx, &self.results);
+                "↑↓ PgUp PgDn scroll · Esc back · ← → key · c characters · l layout · [ ] smoothness · e export · R reset"
+            }
+            Screen::Settings => {
+                self.settings_view.render(frame, body, &ctx, &self.results);
+                "↑↓ choose · ← → change · Enter edit · Esc back · PgUp PgDn section · Shift faster · r reset"
+            }
+            Screen::Help => {
+                help::render(frame, body, &ctx, self);
+                "↑↓ scroll · Esc back · Tab next screen · Ctrl+Q quit"
+            }
+        };
+        frame.render_widget(
+            Paragraph::new(
+                Line::from(Span::styled(
+                    fit_hints(hints, status.width),
+                    self.styles.dim,
+                ))
+                .centered(),
+            ),
+            status,
+        );
+        // Notifications show at the bottom of the other screens.
+        if let (Some(toast), false) = (ctx.toast, self.screen == Screen::Practice) {
+            let line =
+                Line::from(Span::styled(format!(" {toast} "), self.styles.tab_active)).centered();
+            frame.render_widget(
+                Paragraph::new(line),
+                Rect {
+                    y: status.y.saturating_sub(1),
+                    height: 1,
+                    ..status
+                },
+            );
+        }
+    }
+
+    fn render_tabs(&self, frame: &mut Frame, area: Rect) {
+        let s = &self.styles;
+        let mut spans = vec![Span::styled(" Keeper ", s.title), Span::raw(" ")];
+        for (i, screen) in Screen::ALL.iter().enumerate() {
+            let style: Style = if *screen == self.screen {
+                s.tab_active
+            } else {
+                s.tab
+            };
+            spans.push(Span::styled(
+                format!(" F{} {} ", i + 1, screen.title()),
+                style,
+            ));
+            spans.push(Span::raw(" "));
+        }
+        frame.render_widget(Paragraph::new(Line::from(spans)), area);
+    }
 }
 
 /// Drops the last hints until the rest fits in the width.
