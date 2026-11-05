@@ -207,3 +207,34 @@ pub fn contrast(bg: Rgb) -> Rgb {
         Rgb(245, 245, 245)
     }
 }
+
+/// A `name: value` pair.
+pub fn name_value<'a>(styles: &Styles, name: &str, value: String) -> Vec<Span<'a>> {
+    vec![
+        Span::styled(format!("{name}: "), styles.name),
+        Span::styled(value, styles.value),
+    ]
+}
+
+/// Formats a signed number with an explicit plus sign.
+pub fn signed(value: f64, text: String) -> String {
+    if value > 0.0 {
+        format!("+{text}")
+    } else {
+        text
+    }
+}
+
+/// Formats a whole number with thousands separators, e.g. `-12,345`.
+pub fn thousands(value: f64) -> String {
+    let n = value.round() as i64;
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
