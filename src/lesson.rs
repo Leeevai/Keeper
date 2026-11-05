@@ -457,6 +457,101 @@ impl Lesson {
             kind,
         }
     }
+
+    /// The letters whose statistics are tracked by this lesson.
+    pub fn letters(&self) -> &[Letter] {
+        &self.letters
+    }
+
+    pub fn layout(&self) -> &'static Layout {
+        self.keyboard.layout
+    }
+
+    /// Keeps the results typed on a layout of the same family.
+    pub fn filter<'a>(&self, results: &'a [TypingResult]) -> Vec<&'a TypingResult> {
+        let family = &self.keyboard.layout.family;
+        results
+            .iter()
+            .filter(|r| Layout::find(&r.layout).is_some_and(|l| &l.family == family))
+            .collect()
+    }
+
+    pub fn key_stats(&self, results: &[TypingResult]) -> KeyStatsMap {
+        KeyStatsMap::from_results(&self.letters, self.filter(results))
+    }
+
+    /// Decides which keys are included and which key is focused.
+    pub fn update(&self, stats: &KeyStatsMap) -> LessonKeys {
+        let target = Target::new(&self.settings);
+        match self.kind {
+            Kind::Guided { .. } => self.update_guided(stats, &target),
+            _ => LessonKeys::include_all(&self.letters, stats, &target),
+        }
+    }
+
+    fn ordered_letters(&self) -> Vec<Letter> {
+        if self.settings.keyboard_order {
+            Letter::weighted_frequency_order(&self.letters, |l| self.code_points.weight(l.cp))
+        } else {
+            Letter::frequency_order(&self.letters)
+        }
+    }
+
+    fn update_guided(&self, stats: &KeyStatsMap, target: &Target) -> LessonKeys {
+        let recover_keys = self.settings.recover_keys;
+        let letters = self.ordered_letters();
+        let min_size = 6usize;
+        let max_size = min_size
+            + ((letters.len().saturating_sub(min_size)) as f64 * self.settings.alphabet_size)
+                .round() as usize;
+        let mut keys = LessonKeys {
+            keys: letters
+                .iter()
+                .map(|l| LessonKey::new(l, stats, target))
+                .collect(),
+        };
+        for i in 0..keys.keys.len() {
+            let key = keys.keys[i].clone();
+            let included: Vec<&LessonKey> = keys.included().collect();
+            if included.len() < min_size {
+                keys.include(key.letter.cp);
+                continue;
+            }
+            if included.len() < max_size {
+                keys.force(key.letter.cp);
+                continue;
+            }
+            if key.best_confidence.unwrap_or(0.0) >= 1.0 {
+                keys.include(key.letter.cp);
+                continue;
+            }
+            let all_confident = if recover_keys {
+                included.iter().all(|k| k.confidence.unwrap_or(0.0) >= 1.0)
+            } else {
+                included
+                    .iter()
+                    .all(|k| k.best_confidence.unwrap_or(0.0) >= 1.0)
+            };
+            if all_confident {
+                keys.include(key.letter.cp);
+            }
+        }
+        // Focus on the least confident of the included keys.
+        let confidence_of = |k: &LessonKey| {
+            if recover_keys {
+                k.confidence.unwrap_or(0.0)
+            } else {
+                k.best_confidence.unwrap_or(0.0)
+            }
+        };
+        let mut weakest: Vec<&LessonKey> =
+            keys.included().filter(|k| confidence_of(k) < 1.0).collect();
+        weakest.sort_by(|a, b| confidence_of(a).total_cmp(&confidence_of(b)));
+        if let Some(cp) = weakest.first().map(|k| k.letter.cp) {
+            keys.focus(cp);
+        }
+        keys
+    }
 }
 
 fn mangle_and_join(
