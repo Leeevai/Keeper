@@ -182,6 +182,119 @@ impl Practice {
         set
     }
 
+    pub fn render(&self, frame: &mut Frame, area: Rect, ctx: &RenderContext) {
+        let view = ctx.settings.view;
+        let indicators = if view == View::Bare {
+            Vec::new()
+        } else {
+            self.indicators(ctx, area.width)
+        };
+        let text_width = area.width.saturating_sub(6).min(72);
+        let chars = self.input.output();
+        let text_view = TextView {
+            chars: &chars,
+            styles: ctx.styles,
+            whitespace: ctx.settings.whitespace_style,
+            caret: ctx.settings.caret_shape,
+            rtl: self.lesson.language.is_rtl()
+                && !matches!(self.lesson.lesson_type, crate::settings::LessonType::Code),
+            typo: self.input.has_typo(),
+        };
+        let text_height = text_view.height(text_width).max(3);
+        let (_, kb_tall) = KeyboardView::size(&self.lesson.keyboard, true);
+        let (kb_width, kb_short) = KeyboardView::size(&self.lesson.keyboard, false);
+        let [ind_area, _, rest] = Layout::vertical([
+            Constraint::Length(indicators.len() as u16),
+            Constraint::Length(if indicators.is_empty() { 0 } else { 1 }),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
+        // The notification line, the text box and a gap above the keyboard.
+        let fixed = 1 + text_height + 2 + 1;
+        let keyboard_height = if view != View::Normal || kb_width > area.width {
+            0
+        } else if rest.height >= fixed + kb_tall {
+            kb_tall
+        } else if rest.height >= fixed + kb_short {
+            kb_short
+        } else {
+            0
+        };
+        let group_height = (fixed + keyboard_height).min(rest.height);
+        let group = Rect {
+            y: rest.y + rest.height.saturating_sub(group_height) / 2,
+            height: group_height,
+            ..rest
+        };
+        let [toast_area, text_area, _, kb_area] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(text_height + 2),
+            Constraint::Length(1),
+            Constraint::Length(keyboard_height),
+        ])
+        .areas(group);
+
+        let ind_area = Rect {
+            x: ind_area.x + 2,
+            width: ind_area.width.saturating_sub(4),
+            ..ind_area
+        };
+        frame.render_widget(Paragraph::new(indicators).style(ctx.styles.base), ind_area);
+
+        if let Some(toast) = ctx.toast {
+            let line = Line::from(Span::styled(toast.to_string(), ctx.styles.title)).centered();
+            frame.render_widget(Paragraph::new(line), toast_area);
+        }
+
+        let box_area = crate::ui::centered(text_area, text_width + 4, text_height + 2);
+        // The practiced language may differ from the language of the
+        // layout, such as British English on the US layout.
+        let title = format!(
+            " {} · {} · {} ",
+            self.lesson.lesson_type.name(),
+            self.lesson.language.name,
+            self.lesson.layout().name
+        );
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(ctx.styles.border)
+            .title(Span::styled(title, ctx.styles.name));
+        let inner = block.inner(box_area);
+        frame.render_widget(block, box_area);
+        let inner = Rect {
+            x: inner.x + 1,
+            width: inner.width.saturating_sub(2),
+            ..inner
+        };
+        let text_rect = crate::ui::centered(inner, inner.width, text_view.height(inner.width));
+        if let Some(pos) = text_view.render(text_rect, frame.buffer_mut())
+            && ctx.settings.caret_shape == crate::settings::CaretShape::Line
+            && ctx.focused
+        {
+            frame.set_cursor_position(pos);
+        }
+
+        if keyboard_height > 0 {
+            let mut keyboard = KeyboardView::new(&self.lesson.keyboard, ctx.styles);
+            keyboard.zone_colors = ctx.settings.keyboard_colors;
+            if ctx.settings.keyboard_pointers
+                && let Some(&next) = self.input.remaining().first()
+            {
+                keyboard.pointers = KeyboardView::pointers_for(&self.lesson.keyboard, next);
+            }
+            if let Some((key, ok, at)) = &self.last_key
+                && ctx.now - at < 250.0
+            {
+                keyboard.flash = Some((key.clone(), *ok));
+            }
+            if matches!(self.lesson.lesson_type, crate::settings::LessonType::Guided) {
+                keyboard.active = Some(self.active_code_points());
+            }
+            frame.render_widget(keyboard, kb_area);
+        }
+    }
+
     fn indicators(&self, ctx: &RenderContext, width: u16) -> Vec<Line<'static>> {
         let s = ctx.styles;
         let unit = ctx.settings.speed_unit;
