@@ -412,3 +412,79 @@ impl From<&TypingResult> for StreakItem {
         }
     }
 }
+
+/// A run of consecutive lessons with accuracy at or above a level.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Streak {
+    pub level: f64,
+    pub results: Vec<StreakItem>,
+}
+
+/// Tracks the current accuracy streaks at 100%, 97% and 95%.
+///
+/// A port of the linked list of streaks in keybr.com: a result accepted by
+/// a higher level also counts towards the lower levels, and the lower level
+/// takes the results over when the higher level streak breaks.
+#[derive(Debug, Clone)]
+pub struct StreakList {
+    /// Index 0 is the top sentinel, then 100%, 97%, 95%, and the bottom.
+    levels: [f64; 5],
+    results: [Vec<StreakItem>; 5],
+}
+
+impl Default for StreakList {
+    fn default() -> Self {
+        Self {
+            levels: [f64::INFINITY, 1.0, 0.97, 0.95, 0.0],
+            results: Default::default(),
+        }
+    }
+}
+
+impl StreakList {
+    pub const LEVELS: [f64; 3] = [1.0, 0.97, 0.95];
+
+    pub fn append(&mut self, result: &TypingResult) {
+        self.append_impl(4, StreakItem::from(result), &mut |_| {});
+    }
+
+    /// The current streaks at 100%, 97% and 95%.
+    pub fn streaks(&self) -> Vec<Streak> {
+        (1..=3)
+            .map(|i| Streak {
+                level: self.levels[i],
+                results: self.results[i].clone(),
+            })
+            .collect()
+    }
+
+    fn append_impl(&mut self, i: usize, item: StreakItem, accept: &mut dyn FnMut(Streak)) -> bool {
+        if i == 0 {
+            return false;
+        }
+        let next = i - 1;
+        let started = self.results[i].len() > self.results[next].len();
+        if self.append_impl(next, item, accept) {
+            if started {
+                self.results[i].push(item);
+            }
+            return true;
+        }
+        if !started {
+            let taken = self.results[next].clone();
+            self.results[i].extend(taken);
+        }
+        self.results[next].clear();
+        if item.accuracy >= self.levels[i] {
+            self.results[i].push(item);
+            return true;
+        }
+        if started && !self.results[i].is_empty() {
+            accept(Streak {
+                level: self.levels[i],
+                results: self.results[i].clone(),
+            });
+        }
+        false
+    }
+}
