@@ -493,3 +493,31 @@ pub fn compute_speed(length: usize, time: f64) -> f64 {
         0.0
     }
 }
+
+pub fn make_stats(steps: &[Step]) -> Stats {
+    if steps.len() >= 2 {
+        let started = steps[0].time_stamp;
+        let ended = steps[steps.len() - 1].time_stamp;
+        let length = steps.len();
+        let time = (ended - started).round().max(0.0);
+        let errors = steps.iter().filter(|s| s.typo).count();
+        Stats {
+            time: time as u32,
+            speed: compute_speed(length, time),
+            length: length as u32,
+            errors: errors as u32,
+            accuracy: (length - errors) as f64 / length as f64,
+            // The first key press only starts the clock.
+            histogram: Histogram::from_steps(&steps[1..]),
+        }
+    } else {
+        Stats {
+            time: 0,
+            speed: 0.0,
+            length: 0,
+            errors: 0,
+            accuracy: 0.0,
+            histogram: Histogram::default(),
+        }
+    }
+}
