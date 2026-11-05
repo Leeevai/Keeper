@@ -169,3 +169,81 @@ pub struct Palette {
     pub syntax_number: Rgb,
     pub syntax_comment: Rgb,
 }
+
+struct Base {
+    primary: u32,
+    secondary: u32,
+    accent: u32,
+    error: u32,
+    slow: u32,
+    fast: u32,
+    /// How much of the primary color is mixed into the chart and zone colors.
+    mix: f64,
+    dark: bool,
+}
+
+impl Base {
+    fn palette(&self) -> Palette {
+        let primary = Rgb::hex(self.primary);
+        let secondary = Rgb::hex(self.secondary);
+        let accent = Rgb::hex(self.accent);
+        let mixed = |c: u32| primary.mix(Rgb::hex(c), self.mix);
+        let panel = if self.dark {
+            primary.lighten(5.0)
+        } else {
+            primary.darken(5.0)
+        };
+        Palette {
+            background: primary,
+            panel,
+            border: primary.mix(secondary, 70.0),
+            text: secondary,
+            accent,
+            error: Rgb::hex(self.error),
+            hit: primary.mix(secondary, 40.0),
+            special: primary.mix(secondary, 50.0),
+            name: if self.dark {
+                secondary.darken(20.0)
+            } else {
+                secondary.lighten(20.0)
+            },
+            value: if self.dark {
+                secondary.lighten(10.0)
+            } else {
+                secondary.darken(10.0)
+            },
+            more: if self.dark {
+                Rgb::hex(0x5fb356)
+            } else {
+                Rgb::hex(0x2a7e21)
+            },
+            less: if self.dark {
+                Rgb::hex(0xd0646d)
+            } else {
+                Rgb::hex(0xa1464e)
+            },
+            slow_key: Rgb::hex(self.slow),
+            fast_key: Rgb::hex(self.fast),
+            pointer: Rgb::hex(0x4ba0f2),
+            zones: [
+                mixed(0x8ec07c),
+                mixed(0xb8bb26),
+                mixed(0xfabd2f),
+                mixed(0x83a698),
+                mixed(0xd3869b),
+                mixed(0xd66354),
+            ],
+            chart_speed: mixed(0x6fb48c),
+            chart_accuracy: mixed(0xef522f),
+            chart_complexity: mixed(0xac71d0),
+            chart_threshold: mixed(0xd2649a),
+            chart_hits: mixed(0x5f6cb4),
+            chart_misses: mixed(0xb43f3e),
+            chart_ratio: mixed(0xb140b4),
+            syntax_keyword: Rgb::hex(if self.dark { 0x5991cd } else { 0x56a1f4 }),
+            syntax_string: Rgb::hex(0x72b172),
+            syntax_number: Rgb::hex(if self.dark { 0xb281d3 } else { 0x763a9e }),
+            syntax_comment: Rgb::hex(0x9f8484),
+        }
+    }
+}
