@@ -1117,4 +1117,48 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn learning_rate() {
+        let target = Target {
+            target_speed: 175.0,
+        };
+        let samples: Vec<KeySample> = (0..14)
+            .map(|i| KeySample {
+                index: i,
+                time_stamp: i as i64 * 60_000,
+                hit_count: 30,
+                miss_count: 0,
+                time_to_type: 500.0 - i as f64 * 10.0,
+                filtered_time_to_type: 500.0 - i as f64 * 10.0,
+            })
+            .collect();
+        let lr = LearningRate::from(&samples, &target).unwrap();
+        assert!(lr.learning_rate > 0.0);
+        assert!(lr.certainty > 0.9);
+        assert!(lr.remaining_lessons.is_some());
+        assert!(LearningRate::from(&samples[..4], &target).is_none());
+    }
+
+    #[test]
+    fn regression_fits_polynomials() {
+        let xs: Vec<f64> = (0..10).map(f64::from).collect();
+        let ys: Vec<f64> = xs.iter().map(|x| 1.0 + 2.0 * x + 3.0 * x * x).collect();
+        let fit = polynomial_regression(&xs, &ys, 2).unwrap();
+        for (a, b) in fit.iter().zip([1.0, 2.0, 3.0]) {
+            assert!((a - b).abs() < 1e-6, "{fit:?}");
+        }
+        assert!((r2(&xs, &ys, &fit) - 1.0).abs() < 1e-9);
+        assert!(polynomial_regression(&[1.0, 1.0], &[1.0, 2.0], 1).is_none());
+    }
+
+    #[test]
+    fn confidence() {
+        let target = Target {
+            target_speed: 175.0,
+        };
+        assert_eq!(target.confidence(None), None);
+        let c = target.confidence(Some(speed_to_time(350.0))).unwrap();
+        assert!((c - 2.0).abs() < 1e-9);
+    }
 }
