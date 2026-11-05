@@ -139,6 +139,102 @@ impl TypingTest {
             .first()
             .and_then(|&cp| char::from_u32(cp))
     }
+
+    pub fn started(&self) -> bool {
+        !self.steps.is_empty() || self.input.pos() > 0
+    }
+
+    fn all_steps(&self) -> Vec<Step> {
+        let mut steps = self.steps.clone();
+        steps.extend(self.input.steps());
+        steps
+    }
+
+    /// Elapsed milliseconds since the first key press.
+    fn elapsed(&self, now: f64) -> f64 {
+        self.all_steps().first().map_or(0.0, |s| now - s.time_stamp)
+    }
+
+    /// Progress from 0 to 1.
+    fn progress(&self, now: f64) -> f64 {
+        match (self.duration.time(), self.duration.length()) {
+            (Some(ms), _) => self.elapsed(now) / ms,
+            (_, Some(chars)) => self.all_steps().len() as f64 / chars as f64,
+            _ => 0.0,
+        }
+    }
+
+    pub fn handle(&mut self, action: InputAction, now: f64) -> Option<Feedback> {
+        if self.report.is_some() {
+            return None;
+        }
+        // A key pressed after the time is up, before the timer noticed, ends
+        // the test without counting.
+        if self.duration.time().is_some() && self.started() && self.progress(now) >= 1.0 {
+            self.finish();
+            return None;
+        }
+        let feedback = match action {
+            InputAction::Char(cp) => {
+                let ttt = now - self.last_input;
+                self.last_input = now;
+                self.input.append_char(now, cp, ttt)
+            }
+            InputAction::LineBreak => {
+                let ttt = now - self.last_input;
+                self.last_input = now;
+                self.input.append_line_break(now, ttt)
+            }
+            InputAction::ClearChar => self.input.clear_char(),
+            InputAction::ClearWord => self.input.clear_word(),
+        };
+        if self.input.completed() {
+            self.next_line();
+        }
+        if self.progress(now) >= 1.0 {
+            self.finish();
+        }
+        Some(feedback)
+    }
+
+    fn next_line(&mut self) {
+        self.steps.extend(self.input.steps());
+        self.typed[self.active] = Some(self.input.output());
+        if self.active < NUM_LINES - 3 {
+            self.active += 1;
+        } else {
+            self.lines.remove(0);
+            self.typed.remove(0);
+            self.lines
+                .push(generate_line(&mut self.source, &mut self.rng));
+            self.typed.push(None);
+        }
+        self.input = TextInput::new(plain(self.lines[self.active].clone()), self.input.settings);
+    }
+
+    fn finish(&mut self) {
+        let steps = self.all_steps();
+        let stats = make_stats(&steps);
+        let speeds = speed_series(&steps);
+        // A timed test lasts its whole duration, even if typing stopped early.
+        let (time, speed) = match self.duration.time() {
+            Some(ms) => (ms as u32, compute_speed(steps.len(), ms)),
+            None => (stats.time, stats.speed),
+        };
+        self.report = Some(Report {
+            result: TestResult {
+                time_stamp: chrono::Utc::now().timestamp_millis(),
+                speed,
+                accuracy: stats.accuracy,
+                length: stats.length,
+                time,
+                errors: stats.errors,
+                duration: id_of(self.duration),
+                source: self.source_id.clone(),
+            },
+            speeds,
+        });
+    }
 }
 
 /// The serialized name of a setting value, e.g. `seconds15`.
