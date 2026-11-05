@@ -1,0 +1,13 @@
+[package]
+name = "keeper"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A terminal typing tutor ported from keybr.com"
+license = "AGPL-3.0-or-later"
+readme = "README.md"
+default-run = "keeper"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
