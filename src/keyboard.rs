@@ -125,4 +125,62 @@ impl Layout {
         );
         list
     }
+
+    /// The default layout of a language.
+    pub fn select(language: &Language) -> &'static Layout {
+        Self::selectable(language)
+            .first()
+            .copied()
+            .unwrap_or_else(|| Self::get("en-us"))
+    }
+
+    /// The display name including the language, e.g. `English/Colemak`.
+    pub fn full_name(&self) -> String {
+        format!("{}/{}", self.language().name, self.name)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct KeyShape {
+    pub id: KeyId,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub labels: Vec<String>,
+    pub shape: Option<String>,
+    pub zones: Vec<String>,
+    pub homing: bool,
+}
+
+pub const FINGER_ZONES: &[&str] = &[
+    "pinky",
+    "ring",
+    "middle",
+    "leftIndex",
+    "rightIndex",
+    "thumb",
+];
+pub const HAND_ZONES: &[&str] = &["left", "right"];
+pub const ROW_ZONES: &[&str] = &["digit", "top", "home", "bottom"];
+
+impl KeyShape {
+    fn select_zone(&self, zones: &[&'static str]) -> Option<&'static str> {
+        zones
+            .iter()
+            .copied()
+            .find(|z| self.zones.iter().any(|s| s == z))
+    }
+
+    pub fn finger(&self) -> Option<&'static str> {
+        self.select_zone(FINGER_ZONES)
+    }
+
+    pub fn hand(&self) -> Option<&'static str> {
+        self.select_zone(HAND_ZONES)
+    }
+
+    pub fn row(&self) -> Option<&'static str> {
+        self.select_zone(ROW_ZONES)
+    }
 }
