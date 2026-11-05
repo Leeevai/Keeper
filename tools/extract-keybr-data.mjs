@@ -433,3 +433,8 @@ writeJson("code/syntaxes.json", syntaxes);
 for (const name of ["dist_speed.json", "dist_accuracy.json"]) {
   writeJson(`dist/${name}`, JSON.parse(read("keybr-chart", "lib", "dist", name)));
 }
+
+const soundDir = path.join(PKG, "keybr-textinput-sounds", "assets");
+for (const file of fs.readdirSync(soundDir)) {
+  if (file.endsWith(".mp3")) write(`sounds/${file}`, fs.readFileSync(path.join(soundDir, file)));
+}
