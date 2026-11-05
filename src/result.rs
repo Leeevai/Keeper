@@ -283,3 +283,47 @@ impl KeyStats {
         self.index += 1;
     }
 }
+
+/// Statistics of every letter of a lesson.
+#[derive(Debug, Clone)]
+pub struct KeyStatsMap {
+    stats: Vec<KeyStats>,
+    index: HashMap<u32, usize>,
+    pub result_count: usize,
+}
+
+impl KeyStatsMap {
+    pub fn new(letters: &[Letter]) -> Self {
+        Self {
+            stats: letters.iter().cloned().map(KeyStats::new).collect(),
+            index: letters.iter().enumerate().map(|(i, l)| (l.cp, i)).collect(),
+            result_count: 0,
+        }
+    }
+
+    pub fn from_results<'a>(
+        letters: &[Letter],
+        results: impl IntoIterator<Item = &'a TypingResult>,
+    ) -> Self {
+        let mut map = Self::new(letters);
+        for result in results {
+            map.append(result);
+        }
+        map
+    }
+
+    pub fn append(&mut self, result: &TypingResult) {
+        self.result_count += 1;
+        for stats in &mut self.stats {
+            stats.append(result);
+        }
+    }
+
+    pub fn get(&self, cp: u32) -> Option<&KeyStats> {
+        self.index.get(&cp).map(|&i| &self.stats[i])
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &KeyStats> {
+        self.stats.iter()
+    }
+}
