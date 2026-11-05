@@ -394,3 +394,47 @@ fn speed_charts(
     .style(s.base)
     .render(c, buf);
 }
+
+fn overview(s: &Styles, stats: &KeyStatsMap, target: &Target, area: Rect, buf: &mut Buffer) {
+    if stats.result_count == 0 {
+        Paragraph::new(Span::styled("No lessons typed on this layout yet.", s.name))
+            .render(area, buf);
+        return;
+    }
+    let label_width = 4u16;
+    let width = area.width.saturating_sub(label_width) as usize;
+    for (row, (letter, columns)) in progress_overview(stats, target, width)
+        .into_iter()
+        .enumerate()
+    {
+        let y = area.y + row as u16;
+        if y >= area.y + area.height.saturating_sub(1) {
+            break;
+        }
+        buf.set_string(area.x, y, format!("{:>2}", letter.label), s.value);
+        for (c, confidence) in columns.into_iter().enumerate() {
+            if let Some(conf) = confidence {
+                let style = Style::new().fg(s.color(s.confidence_rgb(conf)));
+                buf.set_string(area.x + label_width + c as u16, y, "█", style);
+            } else {
+                buf.set_string(area.x + label_width + c as u16, y, "·", s.dim);
+            }
+        }
+    }
+    let y = area.y + area.height - 1;
+    let legend = Line::from(vec![
+        Span::styled("lessons →   ", s.name),
+        Span::styled("█", Style::new().fg(s.color(s.palette.slow_key))),
+        Span::styled(" slow   ", s.name),
+        Span::styled("█", Style::new().fg(s.color(s.palette.fast_key))),
+        Span::styled(" at the target speed", s.name),
+    ]);
+    Paragraph::new(legend).render(
+        Rect {
+            y,
+            height: 1,
+            ..area
+        },
+        buf,
+    );
+}
