@@ -93,3 +93,18 @@ pub fn grammar_json(name: &str) -> Option<&'static str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_language_has_a_model_and_word_list() {
+        for id in LANGUAGE_IDS {
+            assert!(model_data(id).is_some_and(|d| d.len() > 1000), "{id}");
+            let words: Vec<String> = serde_json::from_str(word_list_json(id).unwrap()).unwrap();
+            assert!(words.len() > 100, "{id}");
+        }
+        assert!(model_data("xx").is_none());
+    }
+}
