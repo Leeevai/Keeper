@@ -127,3 +127,45 @@ impl Rgb {
         }
     }
 }
+
+/// The colors of a theme. The `system` theme has no colors and uses the
+/// terminal palette instead.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Theme {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub colors: Option<Palette>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Palette {
+    pub background: Rgb,
+    pub panel: Rgb,
+    pub border: Rgb,
+    pub text: Rgb,
+    pub accent: Rgb,
+    pub error: Rgb,
+    /// Characters typed correctly.
+    pub hit: Rgb,
+    /// Whitespace symbols.
+    pub special: Rgb,
+    pub name: Rgb,
+    pub value: Rgb,
+    pub more: Rgb,
+    pub less: Rgb,
+    pub slow_key: Rgb,
+    pub fast_key: Rgb,
+    pub pointer: Rgb,
+    pub zones: [Rgb; 6],
+    pub chart_speed: Rgb,
+    pub chart_accuracy: Rgb,
+    pub chart_complexity: Rgb,
+    pub chart_threshold: Rgb,
+    pub chart_hits: Rgb,
+    pub chart_misses: Rgb,
+    pub chart_ratio: Rgb,
+    pub syntax_keyword: Rgb,
+    pub syntax_string: Rgb,
+    pub syntax_number: Rgb,
+    pub syntax_comment: Rgb,
+}
