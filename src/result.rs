@@ -646,4 +646,56 @@ pub mod tests {
         assert_eq!(recovered.complexity, 3);
         assert!(result(0, 300.0, 1.0, &[('a', 5)]).recover().is_none());
     }
+
+    #[test]
+    fn records_round_trip_and_accept_keybr_exports() {
+        let r = result(
+            1_700_000_000_000,
+            250.0,
+            0.9,
+            &[('a', 200), ('b', 300), ('c', 400)],
+        );
+        let json = serde_json::to_string(&r.to_record()).unwrap();
+        let back: ResultRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.into_result(), r);
+        let keybr = r#"{"layout":"en-us","textType":"generated","timeStamp":"2023-11-14T22:13:20.000Z",
+            "length":100,"time":24000,"errors":10,"speed":250,
+            "histogram":[{"codePoint":97,"hitCount":10,"missCount":0,"timeToType":200}]}"#;
+        let imported: ResultRecord = serde_json::from_str(keybr).unwrap();
+        assert_eq!(imported.time_stamp, 1_700_000_000_000);
+    }
+
+    #[test]
+    fn key_stats_are_smoothed() {
+        let letters = vec![
+            Letter::new(u32::from('a'), 1.0),
+            Letter::new(u32::from('b'), 0.5),
+        ];
+        let mut map = KeyStatsMap::new(&letters);
+        map.append(&result(0, 300.0, 1.0, &[('a', 400)]));
+        map.append(&result(1, 300.0, 1.0, &[('a', 200)]));
+        map.append(&result(2, 300.0, 1.0, &[('b', 300)]));
+        let a = map.get(u32::from('a')).unwrap();
+        assert_eq!(a.samples.len(), 2);
+        assert_eq!(a.samples[1].index, 1);
+        // 0.1 * 200 + 0.9 * 400
+        assert!((a.time_to_type.unwrap() - 380.0).abs() < 1e-9);
+        assert!((a.best_time_to_type.unwrap() - 380.0).abs() < 1e-9);
+        let b = map.get(u32::from('b')).unwrap();
+        assert_eq!(b.samples[0].index, 2);
+        assert!(map.get(u32::from('z')).is_none());
+        assert_eq!(map.result_count, 3);
+    }
+
+    #[test]
+    fn summary_metrics() {
+        let mut m = Metric::default();
+        m.append(10.0);
+        assert_eq!((m.last, m.delta, m.avg), (10.0, 10.0, 10.0));
+        m.append(20.0);
+        assert_eq!(
+            (m.last, m.delta, m.min, m.max, m.avg),
+            (20.0, 10.0, 10.0, 20.0, 15.0)
+        );
+    }
 }
