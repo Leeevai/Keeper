@@ -547,4 +547,20 @@ mod tests {
             Feedback::Succeeded
         );
     }
+
+    #[test]
+    fn restart_and_clear() {
+        let mut p = Practice::with_rng(&Settings::default(), &[], Lcg::new(4));
+        let first = p.input.remaining()[0];
+        p.handle(InputAction::Char(first), 10.0);
+        assert_eq!(p.input.pos(), 1);
+        p.restart();
+        assert_eq!(p.input.pos(), 0);
+        assert_eq!(
+            p.handle(InputAction::Char(u32::from('#')), 20.0),
+            Feedback::Failed
+        );
+        assert_eq!(p.handle(InputAction::ClearChar, 30.0), Feedback::Succeeded);
+        assert_eq!(p.handle(InputAction::ClearWord, 40.0), Feedback::Succeeded);
+    }
 }
