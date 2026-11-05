@@ -208,3 +208,34 @@ impl PlaySounds {
         matches!(self, PlaySounds::All | PlaySounds::ErrorsOnly)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SoundTheme {
+    #[default]
+    Default,
+    Mechanical1,
+    Mechanical2,
+    Typewriter1,
+    Typewriter2,
+}
+
+impl SoundTheme {
+    pub const ALL: [SoundTheme; 5] = [
+        SoundTheme::Default,
+        SoundTheme::Mechanical1,
+        SoundTheme::Mechanical2,
+        SoundTheme::Typewriter1,
+        SoundTheme::Typewriter2,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            SoundTheme::Default => "Default",
+            SoundTheme::Mechanical1 => "Mechanical 1",
+            SoundTheme::Mechanical2 => "Mechanical 2",
+            SoundTheme::Typewriter1 => "Typewriter 1",
+            SoundTheme::Typewriter2 => "Typewriter 2",
+        }
+    }
+}
