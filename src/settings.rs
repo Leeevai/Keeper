@@ -670,3 +670,65 @@ impl Settings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_keybr() {
+        let s = Settings::default();
+        assert_eq!(s.lesson_type, LessonType::Guided);
+        assert_eq!(s.target_speed, 175);
+        assert_eq!(s.daily_goal, 30);
+        assert!(s.natural_words && !s.recover_keys && !s.keyboard_order);
+        assert!(s.stop_on_error && s.forgive_errors && !s.space_skips_words);
+        assert_eq!(s.caret_shape, CaretShape::Underline);
+        assert_eq!(s.whitespace_style, WhitespaceStyle::Bullet);
+        assert_eq!(s.speed_unit, SpeedUnit::Wpm);
+        assert_eq!(
+            (s.language.as_str(), s.layout.as_str(), s.geometry.as_str()),
+            ("en", "en-us", "ansi101")
+        );
+        assert_eq!(s.emulation, Emulation::Forward);
+        assert_eq!(s.repeat_words, 1);
+        assert!(s.custom_letters_only && s.custom_lowercase);
+        assert_eq!(s.normalize(), Settings::default());
+    }
+
+    #[test]
+    fn serializes_with_keybr_keys() {
+        let s = Settings {
+            target_speed: 250,
+            caret_shape: CaretShape::Block,
+            ..Default::default()
+        };
+        let json = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["lesson.targetSpeed"], 250);
+        assert_eq!(json["textDisplay.caretShapeStyle"], "block");
+        assert_eq!(json["lesson.type"], "guided");
+        let back: Settings = serde_json::from_value(json).unwrap();
+        assert_eq!(back, s);
+        // Unknown and missing keys are fine.
+        let partial: Settings =
+            serde_json::from_str(r#"{"lesson.targetSpeed": 300, "x": 1}"#).unwrap();
+        assert_eq!(partial.target_speed, 300);
+        assert_eq!(partial.daily_goal, 30);
+    }
+
+    #[test]
+    fn normalizes_out_of_range_values() {
+        let s: Settings = serde_json::from_str(
+            r#"{"lesson.targetSpeed": 5000, "lesson.capitals": 3, "lesson.repeatWords": 0,
+                "keyboard.layout": "nope", "lesson.books.book": "nope", "ui.theme": "nope"}"#,
+        )
+        .unwrap();
+        let s = s.normalize();
+        assert_eq!(s.target_speed, 750);
+        assert_eq!(s.capitals, 1.0);
+        assert_eq!(s.repeat_words, 1);
+        assert_eq!(s.layout, "en-us");
+        assert_eq!(s.book, "en-alice-wonderland");
+        assert_eq!(s.theme, "system");
+    }
+}
