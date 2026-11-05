@@ -82,3 +82,35 @@ impl Screen {
         Self::ALL.iter().position(|s| *s == self).unwrap_or(0)
     }
 }
+
+/// What the screens need to render themselves.
+pub struct RenderContext<'a> {
+    pub styles: &'a Styles,
+    pub settings: &'a Settings,
+    pub daily_goal: DailyGoal,
+    pub toast: Option<&'a str>,
+    /// Milliseconds since the start.
+    pub now: f64,
+    /// Whether the text cursor should be shown.
+    pub focused: bool,
+    pub data_dir: std::path::PathBuf,
+}
+
+/// Shortens a path in the home directory to `~/...`.
+pub fn short_path(path: &std::path::Path) -> String {
+    match dirs::home_dir().and_then(|home| path.strip_prefix(home).ok().map(|p| p.to_path_buf())) {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
+    }
+}
+
+/// Drops the last hints until the rest fits in the width.
+fn fit_hints(hints: &str, width: u16) -> String {
+    let mut parts: Vec<&str> = hints.split(" · ").collect();
+    while parts.len() > 1
+        && unicode_width::UnicodeWidthStr::width(parts.join(" · ").as_str()) > width as usize
+    {
+        parts.pop();
+    }
+    parts.join(" · ")
+}
