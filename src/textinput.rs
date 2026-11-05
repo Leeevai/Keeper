@@ -172,4 +172,83 @@ impl TextInput {
     pub fn completed(&self) -> bool {
         self.pos() == self.len()
     }
+
+    pub fn steps(&self) -> Vec<Step> {
+        self.steps.iter().map(|(s, _)| *s).collect()
+    }
+
+    pub fn has_typo(&self) -> bool {
+        self.typo
+    }
+
+    /// The characters to display: typed, garbage, the cursor and the rest.
+    pub fn output(&self) -> Vec<Char> {
+        let mut out: Vec<Char> = self.steps.iter().map(|(_, c)| *c).collect();
+        if !self.settings.stop_on_error {
+            out.extend(self.garbage.iter().map(|(_, c)| *c));
+        }
+        let remaining = &self.chars[self.pos()..];
+        if let Some((head, tail)) = remaining.split_first() {
+            out.push(Char {
+                attr: Attr::Cursor,
+                ..*head
+            });
+            out.extend_from_slice(tail);
+        }
+        out
+    }
+
+    /// The code points still to be typed.
+    pub fn remaining(&self) -> Vec<u32> {
+        self.chars[self.pos()..].iter().map(|c| c.cp).collect()
+    }
+
+    pub fn clear_char(&mut self) -> Feedback {
+        self.garbage.pop();
+        self.typo = true;
+        Feedback::Succeeded
+    }
+
+    pub fn clear_word(&mut self) -> Feedback {
+        self.garbage.clear();
+        while self.pos() > 0 && self.at(self.pos() - 1).cp != SPACE {
+            self.steps.pop();
+        }
+        self.typo = true;
+        Feedback::Succeeded
+    }
+
+    fn add_step(&mut self, step: Step, ch: Char) {
+        let attr = if step.typo { Attr::Miss } else { Attr::Hit };
+        self.steps.push((step, Char { attr, ..ch }));
+    }
+
+    fn skip_word(&mut self, time_stamp: f64) {
+        while self.pos() < self.len() && self.at(self.pos()).cp != SPACE {
+            let ch = self.at(self.pos());
+            self.add_step(
+                Step {
+                    time_stamp,
+                    cp: ch.cp,
+                    time_to_type: 0.0,
+                    typo: true,
+                },
+                ch,
+            );
+        }
+        if self.pos() < self.len() && self.at(self.pos()).cp == SPACE {
+            let ch = self.at(self.pos());
+            self.add_step(
+                Step {
+                    time_stamp,
+                    cp: ch.cp,
+                    time_to_type: 0.0,
+                    typo: false,
+                },
+                ch,
+            );
+        }
+        self.garbage.clear();
+        self.typo = false;
+    }
 }
