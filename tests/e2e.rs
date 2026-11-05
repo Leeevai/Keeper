@@ -439,3 +439,69 @@ fn emulates_colemak_on_a_qwerty_system() {
     assert_eq!(result["errors"], 0);
     assert!(term.quit());
 }
+
+#[test]
+fn practicing_another_language_with_its_own_letters() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("settings.json"),
+        r#"{"keyboard.language": "ru", "keyboard.layout": "ru-ru"}"#,
+    )
+    .unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(
+        term.screen().contains("Russian · Russia"),
+        "{}",
+        term.screen()
+    );
+    let lesson = term.box_text();
+    assert!(
+        lesson
+            .chars()
+            .all(|c| c == ' ' || ('а'..='я').contains(&c) || c == 'ё'),
+        "{lesson}"
+    );
+    term.type_text(&lesson, Duration::from_millis(55));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    assert_eq!(lines_of(&home.path().join("results.jsonl")), 1);
+    assert!(term.quit());
+}
+
+#[test]
+fn a_typing_test_runs_to_its_report() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    term.send(F2);
+    // 15 seconds → 30 seconds → one minute → 100 characters.
+    for _ in 0..3 {
+        term.send(b"\x04");
+    }
+    assert!(
+        term.wait_for("Test: 100 characters", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    let text = term.box_text();
+    term.type_text(&text[..110.min(text.len())], Duration::from_millis(50));
+    assert!(
+        term.wait_for(
+            "Press Enter or Esc to take a new test.",
+            Duration::from_secs(5)
+        ),
+        "{}",
+        term.screen()
+    );
+    assert!(
+        term.screen().contains("Characters  100"),
+        "{}",
+        term.screen()
+    );
+    assert_eq!(lines_of(&home.path().join("typing-tests.jsonl")), 1);
+    term.send(b"\r");
+    assert!(term.wait_for("Start typing to begin the test.", Duration::from_secs(3)));
+    assert!(term.quit());
+}
