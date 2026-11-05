@@ -251,4 +251,66 @@ impl TextInput {
         self.garbage.clear();
         self.typo = false;
     }
+
+    /// text: `abcd`, garbage: `xbcd`.
+    fn handle_replaced_character(&mut self) -> bool {
+        if self.pos() + RECOVER_BUFFER_LENGTH + 1 > self.len()
+            || self.garbage.len() < RECOVER_BUFFER_LENGTH + 1
+        {
+            return false;
+        }
+        for i in 0..RECOVER_BUFFER_LENGTH {
+            if self.at(self.pos() + i + 1).cp != self.garbage[i + 1].0.cp {
+                return false;
+            }
+        }
+        let garbage = std::mem::take(&mut self.garbage);
+        let ch = self.at(self.pos());
+        self.add_step(
+            Step {
+                time_stamp: garbage[0].0.time_stamp,
+                cp: ch.cp,
+                time_to_type: 0.0,
+                typo: true,
+            },
+            ch,
+        );
+        for (step, _) in &garbage[1..] {
+            let ch = self.at(self.pos());
+            self.add_step(*step, ch);
+        }
+        self.typo = false;
+        true
+    }
+
+    /// text: `abcd`, garbage: `bcd`.
+    fn handle_skipped_character(&mut self) -> bool {
+        if self.pos() + RECOVER_BUFFER_LENGTH + 1 > self.len()
+            || self.garbage.len() < RECOVER_BUFFER_LENGTH
+        {
+            return false;
+        }
+        for i in 0..RECOVER_BUFFER_LENGTH {
+            if self.at(self.pos() + i + 1).cp != self.garbage[i].0.cp {
+                return false;
+            }
+        }
+        let garbage = std::mem::take(&mut self.garbage);
+        let ch = self.at(self.pos());
+        self.add_step(
+            Step {
+                time_stamp: garbage[0].0.time_stamp,
+                cp: ch.cp,
+                time_to_type: 0.0,
+                typo: true,
+            },
+            ch,
+        );
+        for (step, _) in &garbage {
+            let ch = self.at(self.pos());
+            self.add_step(*step, ch);
+        }
+        self.typo = false;
+        true
+    }
 }
