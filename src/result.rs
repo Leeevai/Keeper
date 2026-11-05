@@ -194,3 +194,44 @@ fn deserialize_time_stamp<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Err
             .map_err(serde::de::Error::custom),
     }
 }
+
+/// One lesson worth of statistics for a key.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeySample {
+    /// The index of the lesson.
+    pub index: usize,
+    pub time_stamp: i64,
+    pub hit_count: u32,
+    pub miss_count: u32,
+    pub time_to_type: f64,
+    /// The exponentially smoothed time to type.
+    pub filtered_time_to_type: f64,
+}
+
+/// Exponential smoothing, see <https://en.wikipedia.org/wiki/Exponential_smoothing>.
+#[derive(Debug, Clone, Copy)]
+pub struct ExpFilter {
+    alpha: f64,
+    n: usize,
+    value: f64,
+}
+
+impl ExpFilter {
+    pub fn new(alpha: f64) -> Self {
+        Self {
+            alpha,
+            n: 0,
+            value: f64::NAN,
+        }
+    }
+
+    pub fn add(&mut self, v: f64) -> f64 {
+        self.n += 1;
+        self.value = if self.n > 1 {
+            self.alpha * v + (1.0 - self.alpha) * self.value
+        } else {
+            v
+        };
+        self.value
+    }
+}
