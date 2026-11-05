@@ -637,4 +637,65 @@ mod tests {
         assert_eq!(ti.pos(), 4);
         assert_eq!(make_stats(&ti.steps()).errors, 0);
     }
+
+    #[test]
+    fn space_skips_words() {
+        let settings = TextInputSettings {
+            space_skips_words: true,
+            ..STOP
+        };
+        let mut ti = input("abc def", settings);
+        type_keys(&mut ti, "a ");
+        assert_eq!(ti.pos(), 4);
+        assert_eq!(attrs(&ti), "hmmhcnn");
+    }
+
+    #[test]
+    fn typographic_characters_accept_plain_keys() {
+        let mut ti = input("“a”", STOP);
+        type_keys(&mut ti, "\"a\"");
+        assert!(ti.completed());
+        assert_eq!(make_stats(&ti.steps()).errors, 0);
+    }
+
+    #[test]
+    fn clear_word_removes_the_current_word() {
+        let mut ti = input("ab cd", STOP);
+        type_keys(&mut ti, "ab c");
+        ti.clear_word();
+        assert_eq!(ti.pos(), 3);
+        assert!(ti.has_typo());
+    }
+
+    #[test]
+    fn stats_and_histogram() {
+        let mut ti = input("abab", STOP);
+        type_keys(&mut ti, "abxab");
+        let stats = make_stats(&ti.steps());
+        assert_eq!(stats.length, 4);
+        assert_eq!(stats.errors, 1);
+        assert_eq!(stats.time, 400);
+        assert!((stats.speed - 600.0).abs() < 1e-9);
+        assert!((stats.accuracy - 0.75).abs() < 1e-9);
+        // The first step is excluded from the histogram.
+        let a = stats.histogram.get(u32::from('a')).unwrap();
+        assert_eq!((a.hit_count, a.miss_count, a.time_to_type), (1, 1, 0));
+        let b = stats.histogram.get(u32::from('b')).unwrap();
+        assert_eq!((b.hit_count, b.miss_count, b.time_to_type), (2, 0, 100));
+        assert!(!stats.histogram.validate());
+        assert_eq!(make_stats(&[]).length, 0);
+    }
+
+    #[test]
+    fn histogram_drops_implausible_samples() {
+        let steps: Vec<Step> = (0..4)
+            .map(|i| Step {
+                time_stamp: i as f64,
+                cp: u32::from('a') + i,
+                time_to_type: 10.0,
+                typo: false,
+            })
+            .collect();
+        assert_eq!(Histogram::from_steps(&steps).complexity(), 0);
+    }
 }
