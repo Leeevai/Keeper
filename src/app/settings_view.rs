@@ -1173,4 +1173,48 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn fields_depend_on_the_lesson_type() {
+        let mut s = Settings::default();
+        let has = |s: &Settings, f: Field| fields(s).iter().any(|(_, x)| *x == f);
+        assert!(has(&s, Field::NaturalWords) && !has(&s, Field::Book));
+        s.lesson_type = LessonType::Books;
+        assert!(
+            has(&s, Field::Book) && has(&s, Field::ParagraphIndex) && !has(&s, Field::Capitals)
+        );
+        s.lesson_type = LessonType::Code;
+        s.code_syntax = "python".into();
+        assert!(has(&s, Field::CodeSyntax) && has(&s, Field::CodeFlag(1)));
+        // Emulating needs a layout which can be emulated.
+        assert!(!has(&s, Field::SystemLayout));
+        s.layout = "en-colemak".into();
+        assert!(has(&s, Field::SystemLayout));
+        s.emulation = Emulation::None;
+        assert!(!has(&s, Field::SystemLayout));
+        s.test_source = TestSource::Book;
+        assert!(has(&s, Field::TestBook) && !has(&s, Field::TestLanguage));
+    }
+
+    #[test]
+    fn every_field_can_change_and_has_text() {
+        for lesson_type in LessonType::ALL {
+            for source in TestSource::ALL {
+                let s = Settings {
+                    lesson_type,
+                    test_source: source,
+                    ..Settings::default()
+                };
+                for (_, field) in fields(&s) {
+                    assert!(!field.label().is_empty());
+                    assert!(!field.value(&s).is_empty(), "{field:?}");
+                    assert!(!field.help(&s).is_empty(), "{field:?}");
+                    let mut changed = s.clone();
+                    field.change(&mut changed, 1);
+                    field.change(&mut changed, -1);
+                    let _ = changed.normalize();
+                }
+            }
+        }
+    }
 }
