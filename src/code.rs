@@ -97,6 +97,82 @@ fn rule_set(name: &str) -> &'static Rules {
     &all[name]
 }
 
+impl Syntax {
+    pub fn all() -> &'static [Syntax] {
+        static ALL: OnceLock<Vec<Syntax>> = OnceLock::new();
+        ALL.get_or_init(|| {
+            let data: Vec<SyntaxData> =
+                serde_json::from_str(assets::SYNTAXES_JSON).expect("syntaxes.json");
+            data.into_iter()
+                .map(|d| {
+                    let grammar: Vec<&'static Rules> =
+                        d.grammar.iter().map(|n| rule_set(n)).collect();
+                    let mut used = HashSet::new();
+                    for rules in &grammar {
+                        for prod in rules.values() {
+                            find_flags(prod, &mut used);
+                        }
+                    }
+                    let flags = FLAGS
+                        .iter()
+                        .copied()
+                        .filter(|f| used.contains(*f))
+                        .collect();
+                    Syntax {
+                        id: d.id,
+                        name: d.name,
+                        start: d.start,
+                        grammar,
+                        flags,
+                    }
+                })
+                .collect()
+        })
+    }
+
+    /// Returns the syntax with the given id, or HTML.
+    pub fn get(id: &str) -> &'static Syntax {
+        Self::all()
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap_or_else(|| Self::all().iter().find(|s| s.id == "html").unwrap())
+    }
+
+    fn rule(&self, name: &str) -> Option<&'static Prod> {
+        self.grammar.iter().find_map(|rules| rules.get(name))
+    }
+
+    /// Generates about 200 characters of code.
+    pub fn generate(&self, flags: &HashSet<String>, rng: &mut dyn Rng) -> StyledText {
+        let mut output = Output::new(200);
+        let mut generator = Generator {
+            syntax: self,
+            flags,
+            rng,
+            cls: Vec::new(),
+            last_alt: HashMap::new(),
+        };
+        let start = self.rule(&self.start).expect("start rule");
+        let mut empty_runs = 0;
+        loop {
+            if output.length() > 0 && output.separate(" ").is_err() {
+                break;
+            }
+            let before = output.length();
+            if generator.visit(start, &mut output).is_err() {
+                break;
+            }
+            if output.length() == before {
+                empty_runs += 1;
+                if empty_runs > 100 {
+                    break;
+                }
+            }
+        }
+        output.text
+    }
+}
+
 fn find_flags(prod: &Prod, flags: &mut HashSet<String>) {
     match prod {
         Prod::Cond { flag, cond, .. } => {
@@ -171,5 +247,93 @@ impl Output {
             self.length += n;
         }
         Ok(())
+    }
+}
+
+struct Generator<'a> {
+    syntax: &'a Syntax,
+    flags: &'a HashSet<String>,
+    rng: &'a mut dyn Rng,
+    cls: Vec<Class>,
+    /// The last choice of every alternative, keyed by its address.
+    last_alt: HashMap<usize, usize>,
+}
+
+impl Generator<'_> {
+    /// Returns whether the production is pruned away by the flags.
+    fn pruned(&self, p: &Prod) -> bool {
+        match p {
+            Prod::Cond { flag, inv, cond } => {
+                self.flags.contains(flag) == *inv || self.pruned(cond)
+            }
+            Prod::Span { span, .. } => self.pruned(span),
+            Prod::Opt { opt, .. } => self.pruned(opt),
+            Prod::Seq { seq } => seq.iter().all(|c| self.pruned(c)),
+            Prod::Alt { alt } => alt.iter().all(|c| self.pruned(c)),
+            Prod::Lit(_) | Prod::Ref { .. } => false,
+        }
+    }
+
+    fn visit(&mut self, p: &Prod, out: &mut Output) -> Result<(), Stop> {
+        match p {
+            Prod::Cond { flag, inv, cond } => {
+                if self.flags.contains(flag) != *inv {
+                    self.visit(cond, out)?;
+                }
+            }
+            Prod::Span { cls, span } => {
+                if !self.pruned(span) {
+                    self.cls.push(Class::parse(cls));
+                    let r = self.visit(span, out);
+                    self.cls.pop();
+                    r?;
+                }
+            }
+            Prod::Opt { f, opt } => {
+                if !self.pruned(opt) && (*f >= 1.0 || *f > self.rng.next_f64()) {
+                    self.visit(opt, out)?;
+                }
+            }
+            Prod::Seq { seq } => {
+                for child in seq {
+                    self.visit(child, out)?;
+                }
+            }
+            Prod::Alt { alt } => {
+                let choices: Vec<usize> =
+                    (0..alt.len()).filter(|&i| !self.pruned(&alt[i])).collect();
+                if !choices.is_empty() {
+                    let choice = self.choose(alt.as_ptr() as usize, &choices);
+                    self.visit(&alt[choice], out)?;
+                }
+            }
+            Prod::Ref { r#ref } => {
+                let rule = self
+                    .syntax
+                    .rule(r#ref)
+                    .unwrap_or_else(|| panic!("unknown rule {ref}"));
+                self.visit(rule, out)?;
+            }
+            Prod::Lit(text) => {
+                out.append(text, self.cls.last().copied())?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Picks a random alternative, never the same one twice in a row.
+    fn choose(&mut self, key: usize, choices: &[usize]) -> usize {
+        if choices.len() == 1 {
+            return choices[0];
+        }
+        let prev = self.last_alt.get(&key).copied();
+        loop {
+            let next =
+                choices[(self.rng.next_f64() * choices.len() as f64) as usize % choices.len()];
+            if Some(next) != prev {
+                self.last_alt.insert(key, next);
+                return next;
+            }
+        }
     }
 }
