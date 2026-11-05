@@ -2,5 +2,6 @@
 
 pub mod assets;
 pub mod language;
+pub mod phonetic;
 pub mod rng;
 pub mod unicode;
