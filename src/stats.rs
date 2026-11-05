@@ -114,3 +114,52 @@ pub fn bucketize(data: &[f64], buckets: usize) -> Vec<f64> {
     }
     result
 }
+
+/// Smooths a series with an exponential filter; smoothness goes from 0 (none) to 1.
+pub fn smooth_series(values: impl IntoIterator<Item = f64>, smoothness: f64) -> Vec<f64> {
+    let mut filter = ExpFilter::new(1.0 / 10f64.powf(smoothness * 3.0));
+    values.into_iter().map(|v| filter.add(v)).collect()
+}
+
+/// Characters whose statistics the profile shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CharClass {
+    #[default]
+    Letters,
+    Digits,
+    Punctuators,
+    Specials,
+}
+
+impl CharClass {
+    pub const ALL: [CharClass; 4] = [
+        CharClass::Letters,
+        CharClass::Digits,
+        CharClass::Punctuators,
+        CharClass::Specials,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            CharClass::Letters => "Letters",
+            CharClass::Digits => "Digits",
+            CharClass::Punctuators => "Punctuation characters",
+            CharClass::Specials => "Special characters",
+        }
+    }
+
+    pub fn next(self) -> CharClass {
+        let i = Self::ALL.iter().position(|c| *c == self).unwrap_or(0);
+        Self::ALL[(i + 1) % Self::ALL.len()]
+    }
+
+    /// The letters of the class; `letters` are the letters of the language.
+    pub fn letters(self, letters: &[Letter]) -> Vec<Letter> {
+        match self {
+            CharClass::Letters => letters.to_vec(),
+            CharClass::Digits => Letter::digits(),
+            CharClass::Punctuators => Letter::punctuators(),
+            CharClass::Specials => Letter::specials(),
+        }
+    }
+}
