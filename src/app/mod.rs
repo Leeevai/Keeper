@@ -252,6 +252,33 @@ impl App {
         }
     }
 
+    /// Called regularly to end timed tests; returns whether anything changed.
+    pub fn tick(&mut self, at: Instant) -> bool {
+        let now = self.now_ms(at);
+        if self.typing_test.tick(now) {
+            self.save_test(now);
+            return true;
+        }
+        false
+    }
+
+    /// Whether the screen changes by itself and must be redrawn: a running
+    /// test, a key flash, or a notification showing or just gone.
+    pub fn animating(&self, at: Instant) -> bool {
+        let now = self.now_ms(at);
+        let test = self.screen == Screen::TypingTest
+            && self.typing_test.started()
+            && self.typing_test.report.is_none();
+        let flash = self.screen == Screen::Practice
+            && self
+                .practice
+                .last_key
+                .as_ref()
+                .is_some_and(|(_, _, t)| now - t < 400.0);
+        let toast = self.toasts.iter().any(|(_, until)| *until > now - 300.0);
+        test || flash || toast
+    }
+
     fn typing_test_key(&mut self, key: KeyEvent, at: Instant) {
         let ctrl = is_ctrl(&key);
         let now = self.now_ms(at);
@@ -416,6 +443,16 @@ impl App {
             KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(10),
             KeyCode::Home => self.help_scroll = 0,
             _ => {}
+        }
+    }
+
+    /// Whether the terminal cursor is used as a line caret.
+    pub fn wants_bar_cursor(&self) -> bool {
+        let line = self.settings.caret_shape == crate::settings::CaretShape::Line;
+        match self.screen {
+            Screen::Practice | Screen::TypingTest => line,
+            Screen::Settings => line || self.settings_view.editor.is_some(),
+            _ => false,
         }
     }
 }
