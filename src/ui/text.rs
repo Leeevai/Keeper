@@ -297,4 +297,67 @@ mod tests {
             assert_eq!(buf[(0, 0)].fg, styles.hit.fg.unwrap());
         }
     }
+
+    #[test]
+    fn right_to_left_lines_are_reversed_and_right_aligned() {
+        let styles = Styles::new(Theme::get("system"), ColorMode::Ansi256);
+        let c = chars("אב");
+        let view = TextView {
+            chars: &c,
+            styles: &styles,
+            whitespace: WhitespaceStyle::Space,
+            caret: CaretShape::Block,
+            rtl: true,
+            typo: false,
+        };
+        let mut buf = Buffer::empty(Rect::new(0, 0, 6, 1));
+        view.render(buf.area, &mut buf);
+        let row: String = (0..6).map(|x| buf[(x, 0)].symbol().to_string()).collect();
+        assert_eq!(row, "    בא");
+    }
+
+    #[test]
+    fn a_single_line_scrolls_to_the_cursor() {
+        let styles = Styles::new(Theme::get("light"), ColorMode::Truecolor);
+        let mut c = chars("abcdefghijklmnopqrstuvwxyz");
+        c[20].attr = Attr::Cursor;
+        let view = TextView {
+            chars: &c,
+            styles: &styles,
+            whitespace: WhitespaceStyle::Space,
+            caret: CaretShape::Underline,
+            rtl: false,
+            typo: false,
+        };
+        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
+        let pos = view.render_line(buf.area, &mut buf, true).unwrap();
+        let row: String = (0..10).map(|x| buf[(x, 0)].symbol().to_string()).collect();
+        assert_eq!(buf[(pos.x, 0)].symbol(), "u");
+        assert!(row.ends_with("uvw"), "{row}");
+        // Without following, the line starts at its beginning.
+        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
+        assert!(view.render_line(buf.area, &mut buf, false).is_none());
+        assert_eq!(buf[(0, 0)].symbol(), "a");
+        // An area outside the buffer draws nothing.
+        assert!(view.render(Rect::new(0, 5, 10, 1), &mut buf).is_none());
+    }
+
+    #[test]
+    fn wide_and_combining_characters() {
+        let styles = Styles::new(Theme::get("light"), ColorMode::Truecolor);
+        let c = chars("あい");
+        assert_eq!(wrap(&c, 3).len(), 2);
+        let thai = chars("กั");
+        let view = TextView {
+            chars: &thai,
+            styles: &styles,
+            whitespace: WhitespaceStyle::Space,
+            caret: CaretShape::Block,
+            rtl: false,
+            typo: false,
+        };
+        let mut buf = Buffer::empty(Rect::new(0, 0, 4, 1));
+        view.render(buf.area, &mut buf);
+        assert_eq!(buf[(1, 0)].symbol(), "◌\u{e31}");
+    }
 }
