@@ -835,3 +835,68 @@ pub fn r2(xs: &[f64], ys: &[f64], model: &[f64]) -> f64 {
     let ss_tot: f64 = ys.iter().map(|y| (y - mean).powi(2)).sum();
     1.0 - ss_res / ss_tot
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::TextType;
+    use crate::rng::Lcg;
+    use crate::textinput::{Histogram, Sample, flatten};
+
+    fn settings(f: impl FnOnce(&mut Settings)) -> Settings {
+        let mut s = Settings::default();
+        f(&mut s);
+        s
+    }
+
+    /// A result in which every given letter was typed at the given speed.
+    fn result_at(letters: &str, cpm: f64, index: i64) -> TypingResult {
+        let ttt = speed_to_time(cpm).round() as u32;
+        let histogram = Histogram::new(letters.chars().map(|c| Sample {
+            cp: u32::from(c),
+            hit_count: 5,
+            miss_count: 0,
+            time_to_type: ttt,
+        }));
+        TypingResult::new(
+            "en-us",
+            TextType::Generated,
+            index * 60_000,
+            100,
+            20_000,
+            0,
+            histogram,
+        )
+    }
+
+    fn labels<'a>(keys: impl Iterator<Item = &'a LessonKey>) -> String {
+        keys.map(|k| k.letter.label.as_str()).collect()
+    }
+
+    #[test]
+    fn a_new_student_starts_with_six_letters() {
+        let lesson = Lesson::new(&Settings::default());
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        assert_eq!(labels(keys.included()), "ENIARL");
+        assert_eq!(keys.focused().unwrap().letter.label, "E");
+        assert!(keys.iter().all(|k| k.confidence.is_none()));
+    }
+
+    #[test]
+    fn letters_unlock_when_all_keys_reach_the_target_speed() {
+        let lesson = Lesson::new(&Settings::default());
+        // Slow typing focuses on the slowest key.
+        let results = vec![result_at("enia", 200.0, 0), result_at("rl", 100.0, 1)];
+        let keys = lesson.update(&lesson.key_stats(&results));
+        assert_eq!(labels(keys.included()), "ENIARL");
+        assert_eq!(keys.focused().unwrap().letter.label, "R");
+        // Every key above 175 CPM unlocks the next letter, which gets focused.
+        let results = vec![result_at("eniarl", 200.0, 0)];
+        let keys = lesson.update(&lesson.key_stats(&results));
+        let included = labels(keys.included());
+        assert_eq!(included.chars().count(), 7, "{included}");
+        let focused = keys.focused().unwrap();
+        assert!(focused.confidence.is_none());
+        assert!(!"ENIARL".contains(&focused.letter.label));
+    }
+}
