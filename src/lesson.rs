@@ -152,3 +152,42 @@ impl LessonKeys {
         key.is_focused = true;
     }
 }
+
+/// Dictionary words indexed by their letters.
+struct Dictionary {
+    words: Vec<String>,
+    by_letter: HashMap<u32, Vec<usize>>,
+}
+
+impl Dictionary {
+    fn new(words: Vec<String>) -> Self {
+        let mut by_letter: HashMap<u32, Vec<usize>> = HashMap::new();
+        for (i, word) in words.iter().enumerate() {
+            let mut seen = HashSet::new();
+            for c in word.chars() {
+                if seen.insert(c) {
+                    by_letter.entry(u32::from(c)).or_default().push(i);
+                }
+            }
+        }
+        Self { words, by_letter }
+    }
+
+    /// Finds the words which contain the focused letter and only allowed letters.
+    fn find(&self, filter: &Filter) -> Vec<String> {
+        let candidates: Box<dyn Iterator<Item = &String>> = match filter.focused {
+            Some(cp) => Box::new(
+                self.by_letter
+                    .get(&cp)
+                    .into_iter()
+                    .flatten()
+                    .map(|&i| &self.words[i]),
+            ),
+            None => Box::new(self.words.iter()),
+        };
+        candidates
+            .filter(|w| w.chars().all(|c| filter.includes(u32::from(c))))
+            .cloned()
+            .collect()
+    }
+}
