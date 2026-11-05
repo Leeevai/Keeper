@@ -530,3 +530,63 @@ impl StreakList {
             .collect()
     }
 }
+
+/// Statistics for a calendar day.
+#[derive(Debug, Clone)]
+pub struct DailyStats {
+    pub date: NaiveDate,
+    pub stats: SummaryStats,
+}
+
+/// Groups results by their local date.
+pub fn daily_stats<'a>(
+    results: impl IntoIterator<Item = &'a TypingResult>,
+) -> BTreeMap<NaiveDate, DailyStats> {
+    let mut map: BTreeMap<NaiveDate, DailyStats> = BTreeMap::new();
+    for result in results {
+        let date = result.local_date();
+        map.entry(date)
+            .or_insert_with(|| DailyStats {
+                date,
+                stats: SummaryStats::default(),
+            })
+            .stats
+            .append(result);
+    }
+    map
+}
+
+/// How much of the daily goal is done.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DailyGoal {
+    /// Minutes, zero if not set.
+    pub goal: u32,
+    /// Progress where 1.0 is done.
+    pub value: f64,
+}
+
+impl DailyGoal {
+    pub fn compute<'a>(
+        goal: u32,
+        today: NaiveDate,
+        results: impl IntoIterator<Item = &'a TypingResult>,
+    ) -> Self {
+        let time: u64 = results
+            .into_iter()
+            .filter(|r| r.local_date() == today)
+            .map(|r| r.time as u64)
+            .sum();
+        Self {
+            goal,
+            value: Self::measure(goal, time),
+        }
+    }
+
+    pub fn measure(goal: u32, time_ms: u64) -> f64 {
+        if goal > 0 {
+            time_ms as f64 / 1000.0 / 60.0 / goal as f64
+        } else {
+            0.0
+        }
+    }
+}
