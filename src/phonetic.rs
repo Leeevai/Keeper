@@ -264,6 +264,23 @@ impl TransitionTable {
         }
         &self.segments[index]
     }
+
+    /// Returns the letters of the model with their relative frequencies.
+    pub fn letters(&self, language: &Language) -> Vec<Letter> {
+        let mut f: HashMap<u32, f64> = self.alphabet.iter().map(|&cp| (cp, 0.0)).collect();
+        for segment in &self.segments {
+            for e in segment {
+                *f.entry(e.cp).or_default() += e.frequency as f64;
+            }
+        }
+        let letters = self
+            .alphabet
+            .iter()
+            .filter(|&&cp| cp != SPACE)
+            .map(|&cp| Letter::with_label(cp, f[&cp], language.letter_name(cp)))
+            .collect();
+        Letter::normalize(letters)
+    }
 }
 
 struct Reader<'a> {
@@ -283,5 +300,63 @@ impl Reader<'_> {
 
     fn u16(&mut self) -> Result<u16> {
         Ok(u16::from_be_bytes([self.u8()?, self.u8()?]))
+    }
+}
+
+/// Word prefixes which end with a given letter, used to quickly generate
+/// words which contain the focused letter.
+struct PrefixList {
+    /// For every letter, the prefixes ending with it and their weights.
+    map: HashMap<u32, Vec<(Vec<u32>, u32)>>,
+}
+
+impl PrefixList {
+    fn new(table: &TransitionTable) -> Self {
+        let mut map: HashMap<u32, Vec<(Vec<u32>, u32)>> = HashMap::new();
+        let mut word = Vec::new();
+        Self::walk(table, &mut word, &mut map);
+        Self { map }
+    }
+
+    fn walk(
+        table: &TransitionTable,
+        word: &mut Vec<u32>,
+        map: &mut HashMap<u32, Vec<(Vec<u32>, u32)>>,
+    ) {
+        for e in table.segment(word).to_vec() {
+            if e.cp != SPACE {
+                word.push(e.cp);
+                // keybr.com adds a prefix once per distinct letter in it.
+                let weight = word.iter().collect::<HashSet<_>>().len() as u32;
+                map.entry(e.cp).or_default().push((word.clone(), weight));
+                if word.len() < MIN_LENGTH {
+                    Self::walk(table, word, map);
+                }
+                word.pop();
+            }
+        }
+    }
+
+    fn find(&self, filter: &Filter) -> Vec<(Vec<u32>, u32)> {
+        match filter.focused {
+            Some(focused) => {
+                let prefixes: Vec<_> = self
+                    .map
+                    .get(&focused)
+                    .map(|list| {
+                        list.iter()
+                            .filter(|(p, _)| p.iter().all(|&cp| filter.includes(cp)))
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if prefixes.is_empty() {
+                    vec![(vec![focused], 1)]
+                } else {
+                    prefixes
+                }
+            }
+            None => Vec::new(),
+        }
     }
 }
