@@ -177,3 +177,39 @@ pub fn fields(s: &Settings) -> Vec<(Section, Field)> {
     }
     v
 }
+
+/// Moves `delta` steps through a list of choices, wrapping around.
+fn cycle<T: PartialEq + Clone>(all: &[T], current: &T, delta: i32) -> T {
+    let n = all.len() as i32;
+    if n == 0 {
+        return current.clone();
+    }
+    let i = all.iter().position(|v| v == current).unwrap_or(0) as i32;
+    all[((i + delta) % n + n) as usize % n as usize].clone()
+}
+
+fn step_f64(value: f64, delta: i32, step: f64) -> f64 {
+    ((value + delta as f64 * step) / step).round() * step
+}
+
+fn on_off(v: bool) -> String {
+    if v { "[x] on".into() } else { "[ ] off".into() }
+}
+
+fn percent(v: f64) -> String {
+    format!("{:.0}%", v * 100.0)
+}
+
+fn book_name(id: &str) -> String {
+    let b = Book::get(id);
+    format!("{} — {}", b.title, b.author)
+}
+
+fn step_list_size(value: u32, delta: i32) -> u32 {
+    let step = if value < 100 || (value == 100 && delta < 0) {
+        10
+    } else {
+        50
+    };
+    (value as i32 + delta * step).clamp(10, 1000) as u32
+}
