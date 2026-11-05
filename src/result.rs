@@ -487,4 +487,46 @@ impl StreakList {
         }
         false
     }
+
+    fn end_impl(&self, i: usize, accept: &mut dyn FnMut(Streak)) {
+        if i > 1 {
+            self.end_impl(i - 1, accept);
+        }
+        if !self.results[i].is_empty() {
+            accept(Streak {
+                level: self.levels[i],
+                results: self.results[i].clone(),
+            });
+        }
+    }
+
+    /// Finds the longest streak at every accuracy level.
+    pub fn find_longest<'a>(results: impl IntoIterator<Item = &'a TypingResult>) -> Vec<Streak> {
+        let mut candidates: Vec<Streak> = Self::LEVELS
+            .iter()
+            .map(|&level| Streak {
+                level,
+                results: Vec::new(),
+            })
+            .collect();
+        let mut accept = |streak: Streak| {
+            for candidate in candidates.iter_mut() {
+                if streak.level >= candidate.level
+                    && streak.results.len() >= candidate.results.len()
+                {
+                    candidate.results = streak.results;
+                    break;
+                }
+            }
+        };
+        let mut list = StreakList::default();
+        for result in results {
+            list.append_impl(4, StreakItem::from(result), &mut accept);
+        }
+        list.end_impl(4, &mut accept);
+        candidates
+            .into_iter()
+            .filter(|s| !s.results.is_empty())
+            .collect()
+    }
 }
