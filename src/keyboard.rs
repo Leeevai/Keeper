@@ -352,3 +352,32 @@ fn remap_zones(shapes: &mut [KeyShape], remap: &HashMap<KeyId, Vec<String>>) {
         }
     }
 }
+
+fn add_dead_combos(map: &mut ComboMap, dead: u32, key: &str, modifier: Modifier) {
+    if !is_diacritic(dead) {
+        return;
+    }
+    let prefix = KeyCombo {
+        cp: dead,
+        key: key.to_string(),
+        modifier,
+        prefix: None,
+    };
+    let bases: Vec<KeyCombo> = map
+        .list
+        .iter()
+        .filter(|c| c.prefix.is_none())
+        .cloned()
+        .collect();
+    for base in bases {
+        let combined = combine_diacritic(base.cp, dead);
+        if combined != base.cp {
+            map.set(KeyCombo {
+                cp: combined,
+                key: base.key,
+                modifier: base.modifier,
+                prefix: Some(Box::new(prefix.clone())),
+            });
+        }
+    }
+}
