@@ -218,3 +218,62 @@ fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
     fs::rename(&tmp, path).with_context(|| format!("cannot write {}", path.display()))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::TextType;
+    use crate::settings::LessonType;
+    use crate::textinput::{Histogram, Sample};
+
+    fn result(ts: i64) -> TypingResult {
+        let histogram = Histogram::new("abc".chars().map(|c| Sample {
+            cp: u32::from(c),
+            hit_count: 3,
+            miss_count: 0,
+            time_to_type: 200,
+        }));
+        TypingResult::new("en-us", TextType::Generated, ts, 100, 20_000, 2, histogram)
+    }
+
+    #[test]
+    fn settings_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        assert_eq!(storage.load_settings(), Settings::default());
+        let settings = Settings {
+            lesson_type: LessonType::Books,
+            target_speed: 300,
+            ..Settings::default()
+        };
+        storage.save_settings(&settings).unwrap();
+        assert_eq!(storage.load_settings(), settings);
+        fs::write(storage.settings_path(), "{nope").unwrap();
+        assert_eq!(storage.load_settings(), Settings::default());
+        assert!(dir.path().join("settings.json.bad").exists());
+    }
+
+    #[test]
+    fn results_are_appended_and_survive_garbage() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        assert!(storage.load_results().unwrap().is_empty());
+        storage.append_result(&result(2)).unwrap();
+        storage.append_result(&result(1)).unwrap();
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(storage.results_path())
+            .unwrap();
+        writeln!(f, "garbage").unwrap();
+        let loaded = storage.load_results().unwrap();
+        assert_eq!(
+            loaded.iter().map(|r| r.time_stamp).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert_eq!(loaded[0], result(1));
+        let backup = storage.reset_results().unwrap().unwrap();
+        assert!(backup.exists());
+        assert!(storage.load_results().unwrap().is_empty());
+        assert!(storage.reset_results().unwrap().is_none());
+    }
+}
