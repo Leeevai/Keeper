@@ -81,3 +81,111 @@ pub fn wrap(chars: &[Char], width: usize) -> Vec<Range<usize>> {
     }
     lines
 }
+
+impl TextView<'_> {
+    fn glyph(&self, ch: &Char) -> String {
+        if ch.cp == SPACE {
+            return self.whitespace.symbol().to_string();
+        }
+        let c = char::from_u32(ch.cp).unwrap_or('?');
+        if c.width() == Some(0) {
+            format!("◌{c}")
+        } else {
+            c.to_string()
+        }
+    }
+
+    fn style(&self, ch: &Char) -> Style {
+        let s = self.styles;
+        let space = ch.cp == SPACE;
+        match ch.attr {
+            Attr::Normal if space => s.special,
+            Attr::Normal => s.syntax(ch.cls),
+            Attr::Hit => s.hit,
+            Attr::Miss => s.miss,
+            Attr::Garbage => s.garbage,
+            Attr::Cursor => {
+                let base = if self.typo {
+                    s.miss
+                } else if space {
+                    s.special
+                } else {
+                    s.syntax(ch.cls)
+                };
+                let accent = s.color(s.palette.accent);
+                match self.caret {
+                    CaretShape::Block => {
+                        let fg = if s.themed {
+                            s.color(s.palette.background)
+                        } else {
+                            ratatui::style::Color::Reset
+                        };
+                        let bg = if s.themed {
+                            s.color(s.palette.text)
+                        } else {
+                            ratatui::style::Color::Reset
+                        };
+                        if s.themed {
+                            Style::new().fg(fg).bg(bg)
+                        } else {
+                            base.add_modifier(Modifier::REVERSED)
+                        }
+                    }
+                    CaretShape::Box => {
+                        let bg = s.color(if s.themed {
+                            s.palette.border
+                        } else {
+                            s.palette.special
+                        });
+                        base.bg(bg).add_modifier(Modifier::BOLD)
+                    }
+                    CaretShape::Line => base.add_modifier(Modifier::BOLD),
+                    CaretShape::Underline => base
+                        .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
+                        .underline_color(accent),
+                }
+            }
+        }
+    }
+
+    /// The number of lines needed to show the text in the given width.
+    pub fn height(&self, width: u16) -> u16 {
+        wrap(self.chars, width as usize).len() as u16
+    }
+
+    /// Renders the text centered in the area and returns the position of
+    /// the cursor, which is used by the line caret.
+    pub fn render(&self, area: Rect, buf: &mut Buffer) -> Option<Position> {
+        let area = area.intersection(buf.area);
+        if area.is_empty() {
+            return None;
+        }
+        let lines = wrap(self.chars, area.width as usize);
+        let mut cursor = None;
+        for (row, range) in lines.iter().enumerate().take(area.height as usize) {
+            let y = area.y + row as u16;
+            let mut chars: Vec<&Char> = self.chars[range.clone()].iter().collect();
+            if self.rtl {
+                chars.reverse();
+            }
+            let line_width: usize = chars.iter().map(|c| char_width(c.cp)).sum();
+            let mut x = if self.rtl {
+                area.x + (area.width as usize).saturating_sub(line_width) as u16
+            } else {
+                area.x
+            };
+            for ch in chars {
+                let w = char_width(ch.cp) as u16;
+                if x + w > area.x + area.width {
+                    break;
+                }
+                if ch.attr == Attr::Cursor {
+                    cursor = Some(Position::new(x, y));
+                }
+                buf.set_string(x, y, self.glyph(ch), self.style(ch));
+                x += w;
+            }
+        }
+        cursor
+    }
+}
