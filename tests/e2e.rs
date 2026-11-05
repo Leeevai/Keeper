@@ -334,3 +334,59 @@ fn settings_change_the_lesson_and_are_saved() {
     );
     assert!(term.quit());
 }
+
+#[test]
+fn custom_text_is_edited_with_a_paste_and_practiced() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 42, 130);
+    term.send(F4);
+    // Lesson type: guided → common words → books → custom text.
+    for _ in 0..3 {
+        term.send(RIGHT);
+    }
+    assert!(
+        term.wait_for("Custom text", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(DOWN);
+    term.send(b"\r");
+    assert!(
+        term.wait_for("Ctrl+S save", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(b"\x15"); // Ctrl+U clears the text.
+    term.send(b"\x1b[200~Hello, World!\r\nFrom Keeper.\x1b[201~");
+    term.send(b"\x13"); // Ctrl+S saves it.
+    assert!(
+        term.wait_for("Hello, World! From Keeper.", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    let settings = std::fs::read_to_string(home.path().join("settings.json")).unwrap();
+    assert!(
+        settings.contains(r#""lesson.customText.content": "Hello, World!\nFrom Keeper.""#),
+        "{settings}"
+    );
+    term.send(ESC);
+    assert!(
+        term.wait_for("Custom text · English", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    let lesson = term.box_text();
+    assert!(
+        lesson.starts_with("hello world from keeper hello world"),
+        "{lesson}"
+    );
+    term.type_text(&lesson, Duration::from_millis(50));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    assert!(results.contains(r#""textType":"natural""#), "{results}");
+    assert!(term.quit());
+}
