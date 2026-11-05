@@ -367,6 +367,170 @@ impl Field {
             TestParagraph => format!("{}", s.test_paragraph_index + 1),
         }
     }
+
+    /// Changes the value by `delta` steps.
+    pub fn change(self, s: &mut Settings, delta: i32) {
+        use Field::*;
+        let options = s.keyboard_options();
+        match self {
+            LessonType => {
+                s.lesson_type = cycle(&crate::settings::LessonType::ALL, &s.lesson_type, delta)
+            }
+            NaturalWords => s.natural_words = !s.natural_words,
+            KeyboardOrder => s.keyboard_order = !s.keyboard_order,
+            AlphabetSize => {
+                s.alphabet_size = step_f64(s.alphabet_size, delta, 0.05).clamp(0.0, 1.0)
+            }
+            RecoverKeys => s.recover_keys = !s.recover_keys,
+            WordListSize => s.word_list_size = step_list_size(s.word_list_size, delta),
+            LongWordsOnly => s.long_words_only = !s.long_words_only,
+            Book => {
+                let ids: Vec<String> = crate::content::Book::all()
+                    .iter()
+                    .map(|b| b.id.clone())
+                    .collect();
+                s.book = cycle(&ids, &s.book, delta);
+                s.paragraph_index = 0;
+            }
+            ParagraphIndex => {
+                let n = crate::content::Book::get(&s.book).paragraphs().len() as i64;
+                s.paragraph_index =
+                    (s.paragraph_index as i64 + delta as i64).rem_euclid(n.clamp(1, 1001)) as u32;
+            }
+            BookLettersOnly => s.book_letters_only = !s.book_letters_only,
+            BookLowercase => s.book_lowercase = !s.book_lowercase,
+            CustomText => {}
+            CustomLettersOnly => s.custom_letters_only = !s.custom_letters_only,
+            CustomLowercase => s.custom_lowercase = !s.custom_lowercase,
+            CustomRandomize => s.custom_randomize = !s.custom_randomize,
+            CodeSyntax => {
+                let ids: Vec<String> = Syntax::all().iter().map(|x| x.id.clone()).collect();
+                s.code_syntax = cycle(&ids, &s.code_syntax, delta);
+            }
+            CodeFlag(i) => {
+                let flag = FLAGS[i].to_string();
+                if let Some(pos) = s.code_flags.iter().position(|f| *f == flag) {
+                    s.code_flags.remove(pos);
+                } else {
+                    s.code_flags.push(flag);
+                }
+            }
+            Benford => s.benford = !s.benford,
+            Capitals => s.capitals = step_f64(s.capitals, delta, 0.05).clamp(0.0, 1.0),
+            Punctuators => s.punctuators = step_f64(s.punctuators, delta, 0.05).clamp(0.0, 1.0),
+            RepeatWords => s.repeat_words = (s.repeat_words as i32 + delta).clamp(1, 10) as u32,
+            LessonLength => {
+                s.lesson_length = step_f64(s.lesson_length, delta, 0.05).clamp(0.0, 1.0)
+            }
+            TargetSpeed => {
+                s.target_speed = (s.target_speed as i32 + delta * 5).clamp(75, 750) as u32
+            }
+            DailyGoal => s.daily_goal = (s.daily_goal as i32 + delta * 5).clamp(0, 120) as u32,
+            StopOnError => s.stop_on_error = !s.stop_on_error,
+            ForgiveErrors => s.forgive_errors = !s.forgive_errors,
+            SpaceSkipsWords => s.space_skips_words = !s.space_skips_words,
+            CaretShape => {
+                s.caret_shape = cycle(&crate::settings::CaretShape::ALL, &s.caret_shape, delta)
+            }
+            Whitespace => {
+                s.whitespace_style = cycle(&WhitespaceStyle::ALL, &s.whitespace_style, delta)
+            }
+            PlaySounds => {
+                s.play_sounds = cycle(&crate::settings::PlaySounds::ALL, &s.play_sounds, delta)
+            }
+            SoundTheme => {
+                s.sound_theme = cycle(&crate::settings::SoundTheme::ALL, &s.sound_theme, delta)
+            }
+            SoundVolume => s.sound_volume = step_f64(s.sound_volume, delta, 0.1).clamp(0.0, 1.0),
+            Language => {
+                let ids: Vec<String> = crate::language::Language::all()
+                    .iter()
+                    .map(|l| l.id.clone())
+                    .collect();
+                let id = cycle(&ids, &options.language.id, delta);
+                s.set_language(&id);
+            }
+            Layout => {
+                let ids: Vec<String> = KeyboardLayout::selectable(options.language)
+                    .iter()
+                    .map(|l| l.id.clone())
+                    .collect();
+                let id = cycle(&ids, &options.layout.id, delta);
+                s.set_layout(&id);
+            }
+            Geometry => {
+                s.geometry = cycle(&options.layout.geometries, &options.geometry.id, delta);
+                s.zones = "standard".into();
+            }
+            Zones => {
+                if options.layout.layout_mod.is_none() {
+                    s.zones = cycle(&options.geometry.zones, &options.zones, delta);
+                }
+            }
+            Emulation => s.emulation = cycle(&crate::settings::Emulation::ALL, &s.emulation, delta),
+            SystemLayout => {
+                let ids: Vec<String> = KeyboardLayout::all()
+                    .iter()
+                    .filter(|l| l.language().script == options.language.script)
+                    .map(|l| l.id.clone())
+                    .collect();
+                s.system_layout = cycle(&ids, &s.system_layout, delta);
+            }
+            KeyboardColors => s.keyboard_colors = !s.keyboard_colors,
+            KeyboardPointers => s.keyboard_pointers = !s.keyboard_pointers,
+            SpeedUnit => {
+                s.speed_unit = cycle(&crate::settings::SpeedUnit::ALL, &s.speed_unit, delta)
+            }
+            Theme => {
+                let ids: Vec<String> = crate::theme::Theme::all()
+                    .iter()
+                    .map(|t| t.id.to_string())
+                    .collect();
+                s.theme = cycle(&ids, &s.theme, delta);
+            }
+            ColorMode => {
+                s.color_mode = cycle(&crate::settings::ColorMode::ALL, &s.color_mode, delta)
+            }
+            View => {
+                let all = [
+                    crate::settings::View::Normal,
+                    crate::settings::View::Compact,
+                    crate::settings::View::Bare,
+                ];
+                s.view = cycle(&all, &s.view, delta);
+            }
+            TestDuration => {
+                s.test_duration =
+                    cycle(&crate::settings::TestDuration::ALL, &s.test_duration, delta)
+            }
+            TestSource => {
+                s.test_source = cycle(&crate::settings::TestSource::ALL, &s.test_source, delta)
+            }
+            TestLanguage => {
+                let ids: Vec<String> = crate::language::Language::all()
+                    .iter()
+                    .map(|l| l.id.clone())
+                    .collect();
+                s.test_language = cycle(&ids, &s.test_language, delta);
+            }
+            TestWordListSize => {
+                s.test_word_list_size = step_list_size(s.test_word_list_size, delta)
+            }
+            TestBook => {
+                let ids: Vec<String> = crate::content::Book::all()
+                    .iter()
+                    .map(|b| b.id.clone())
+                    .collect();
+                s.test_book = cycle(&ids, &s.test_book, delta);
+                s.test_paragraph_index = 0;
+            }
+            TestParagraph => {
+                let n = crate::content::Book::get(&s.test_book).paragraphs().len() as i64;
+                s.test_paragraph_index = (s.test_paragraph_index as i64 + delta as i64)
+                    .rem_euclid(n.clamp(1, 1001)) as u32;
+            }
+        }
+    }
 }
 
 /// The number of lines a text takes when wrapped at word boundaries.
