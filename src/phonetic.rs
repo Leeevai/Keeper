@@ -485,3 +485,67 @@ pub fn unscramble_word(word: &str) -> String {
         .map(|i| a[(SCRAMBLE_X * i + SCRAMBLE_Y) % n])
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rng::Lcg;
+
+    fn en() -> PhoneticModel {
+        PhoneticModel::load(Language::get("en")).unwrap()
+    }
+
+    #[test]
+    fn loads_every_model() {
+        for language in Language::all() {
+            let model = PhoneticModel::load(language).unwrap();
+            assert!(
+                model.letters.len() >= language.alphabet.len().min(20),
+                "{}",
+                language.id
+            );
+            let total: f64 = model.letters.iter().map(|l| l.f).sum();
+            assert!((total - 1.0).abs() < 1e-9, "{}", language.id);
+        }
+    }
+
+    #[test]
+    fn rejects_corrupt_models() {
+        assert!(TransitionTable::load(b"nope").is_err());
+        let data = assets::model_data("en").unwrap();
+        assert!(TransitionTable::load(&data[..data.len() - 1]).is_err());
+        let mut extra = data.to_vec();
+        extra.push(0);
+        assert!(TransitionTable::load(&extra).is_err());
+    }
+
+    #[test]
+    fn english_letters_are_in_frequency_order() {
+        let model = en();
+        let order: String = Letter::frequency_order(&model.letters)
+            .iter()
+            .take(6)
+            .map(|l| l.label.clone())
+            .collect();
+        // The same order keybr.com computes from its English model.
+        assert_eq!(order, "ENIARL");
+    }
+
+    #[test]
+    fn words_use_only_filtered_letters_and_contain_the_focused_one() {
+        let model = en();
+        let letters: Vec<u32> = "enitrl".chars().map(u32::from).collect();
+        let filter = Filter::new(&letters, Some(u32::from('l')));
+        let mut rng = Lcg::new(1);
+        let mut with_focus = 0;
+        for _ in 0..500 {
+            let word = model.next_word(&filter, &mut rng);
+            assert!(word.chars().all(|c| "enitrl".contains(c)), "{word}");
+            assert!(word.chars().count() <= MAX_LENGTH + 2, "{word}");
+            if word.contains('l') {
+                with_focus += 1;
+            }
+        }
+        assert!(with_focus > 450, "{with_focus}");
+    }
+}
