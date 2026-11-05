@@ -224,3 +224,126 @@ function splitArgs(body) {
 
 const str = (arg) => JSON.parse(arg);
 const refs = (arg, prefix) => [...arg.matchAll(new RegExp(`${prefix}\\.(\\w+)`, "g"))].map((m) => m[1]);
+
+// ---------------------------------------------------------------------------
+// Languages.
+
+const languageSrc = read("keybr-keyboard", "lib", "language.ts");
+const languages = registryEntries(languageSrc, "Language").map(({ name, body }) => {
+  const [id, script, direction, alphabet] = splitArgs(body).map(str);
+  return { key: name, id, name: languageNames.of(id), script, direction, alphabet };
+});
+const languageByKey = new Map(languages.map((l) => [l.key, l]));
+
+// ---------------------------------------------------------------------------
+// Geometries, zone mods and layouts.
+
+const geometrySrc = read("keybr-keyboard", "lib", "geometry.ts");
+const zoneMods = registryEntries(geometrySrc, "ZoneMod").map(({ name, body }) => {
+  const [id, label, dict] = splitArgs(body);
+  return { key: name, id: str(id), name: str(label), dict: dict.trim() };
+});
+const geometryRegistry = registryEntries(geometrySrc, "Geometry").map(({ name, body }) => {
+  const [id, label, form, zones] = splitArgs(body);
+  const zoneKeys = zones.includes("ZoneMod.ALL") ? zoneMods.map((z) => z.key) : refs(zones, "ZoneMod");
+  return { key: name, id: str(id), name: str(label), form: str(form), zones: zoneKeys };
+});
+
+const geometryDir = path.join(PKG, "keybr-keyboard", "lib", "geometry");
+const geometryExports = new Map();
+for (const file of fs.readdirSync(geometryDir)) {
+  if (!file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
+  const src = fs.readFileSync(path.join(geometryDir, file), "utf8");
+  for (const m of src.matchAll(/export const (\w+)\b/g)) {
+    geometryExports.set(m[1], () => parseExport(src, m[1]));
+  }
+}
+const resolveGeometry = (name) => {
+  const load = geometryExports.get(name);
+  if (load == null) throw new Error(`geometry export ${name} not found`);
+  return load();
+};
+
+const keyboardLoadSrc = read("keybr-keyboard", "lib", "load.ts");
+const geometryDictName = new Map(
+  [...keyboardLoadSrc.matchAll(/\[\s*Geometry\.(\w+),\s*(\w+),?\s*\]/g)].map((m) => [m[1], m[2]]),
+);
+const layoutDictName = new Map(
+  [...keyboardLoadSrc.matchAll(/\[\s*Layout\.(\w+),\s*(\w+),?\s*\]/g)].map((m) => [m[1], m[2]]),
+);
+
+const geometries = geometryRegistry.map((g) => {
+  const dict = resolveSpreads(resolveGeometry(geometryDictName.get(g.key)), resolveGeometry);
+  const keys = Object.entries(dict).map(([id, k]) => ({
+    id,
+    x: k.x,
+    y: k.y,
+    w: k.w ?? 1,
+    h: k.h ?? 1,
+    labels: (k.labels ?? []).map((l) => l.text),
+    shape: k.shape ?? null,
+    zones: k.zones ?? [],
+    homing: k.homing ?? false,
+  }));
+  const zones = g.zones.map((key) => zoneMods.find((z) => z.key === key).id);
+  return { id: g.id, name: g.name, form: g.form, zones, keys };
+});
+
+const zoneModDicts = Object.fromEntries(
+  zoneMods.map((z) => [z.id, { name: z.name, zones: resolveGeometry(z.dict) }]),
+);
+
+const layoutModSrc = read("keybr-keyboard", "lib", "mod.ts");
+const layoutMods = {};
+for (const decl of layoutModSrc.split("export const ").slice(1)) {
+  const m = /^(\w+): Mod = [\s\S]*?remapZones\(dict, (\w+)\)/.exec(decl);
+  if (m != null) {
+    layoutMods[m[1]] = resolveGeometry(m[2]);
+  }
+}
+
+const layoutDir = path.join(PKG, "keybr-keyboard", "lib", "layout");
+const layoutExports = new Map();
+for (const file of fs.readdirSync(layoutDir)) {
+  if (!file.endsWith(".ts")) continue;
+  const src = fs.readFileSync(path.join(layoutDir, file), "utf8");
+  for (const m of src.matchAll(/export const (\w+)\b/g)) {
+    layoutExports.set(m[1], () => parseExport(src, m[1]));
+  }
+}
+
+const layoutSrc = read("keybr-keyboard", "lib", "layout.ts");
+const geometryIdByKey = new Map(geometryRegistry.map((g) => [g.key, g.id]));
+const layouts = [];
+for (const { name, body } of registryEntries(layoutSrc, "Layout")) {
+  const args = splitArgs(body);
+  if (args[0] === "id" || !args[0].startsWith('"')) continue; // the custom() template
+  const [id, xid, label, family, language, emulate, geometryArg, mod = "nullMod"] = args;
+  const dictName = layoutDictName.get(name);
+  if (dictName == null) throw new Error(`no character dict for layout ${name}`);
+  const chars = layoutExports.get(dictName)();
+  const languageKey = language.replace("Language.", "");
+  const formattedName = str(label).replaceAll(/\{([-A-Z]+)\}/g, (_, region) => regionNames.of(region));
+  layouts.push({
+    id: str(id),
+    xid: Number(xid),
+    name: formattedName,
+    family: str(family),
+    language: languageByKey.get(languageKey).id,
+    emulate: emulate === "true",
+    geometries: refs(geometryArg, "Geometry").map((key) => geometryIdByKey.get(key)),
+    mod: mod.trim() === "nullMod" ? null : mod.trim(),
+    chars,
+  });
+}
+const layoutOrder = refs(layoutSrc.slice(layoutSrc.indexOf("static readonly ALL")), "Layout");
+const layoutKeyById = new Map(
+  registryEntries(layoutSrc, "Layout")
+    .filter(({ body }) => splitArgs(body)[0].startsWith('"'))
+    .map(({ name, body }) => [str(splitArgs(body)[0]), name]),
+);
+layouts.sort((a, b) => layoutOrder.indexOf(layoutKeyById.get(a.id)) - layoutOrder.indexOf(layoutKeyById.get(b.id)));
+
+writeJson("keyboard/languages.json", languages.map(({ key, ...rest }) => rest));
+writeJson("keyboard/geometries.json", { geometries, zoneMods: zoneModDicts, layoutMods });
+writeJson("keyboard/layouts.json", layouts);
