@@ -122,6 +122,22 @@ impl Profile {
         self.smoothness = self.smoothness.clamp(0.0, 1.0);
         ProfileAction::None
     }
+
+    /// The layout whose keys are shown: the chosen one, the configured one
+    /// if it has results, or the first one with results.
+    fn selected_layout(&self, results: &[TypingResult], settings: &Settings) -> String {
+        let layouts = layouts_in(results);
+        if let Some(l) = &self.layout
+            && layouts.contains(l)
+        {
+            return l.clone();
+        }
+        if layouts.contains(&settings.layout) || layouts.is_empty() {
+            settings.layout.clone()
+        } else {
+            layouts[0].clone()
+        }
+    }
 }
 
 /// Layouts that have results, most used first.
