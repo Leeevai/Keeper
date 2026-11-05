@@ -89,3 +89,66 @@ impl LessonKey {
         }
     }
 }
+
+/// The keys of a lesson, in the order they are unlocked.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LessonKeys {
+    keys: Vec<LessonKey>,
+}
+
+impl LessonKeys {
+    fn include_all(letters: &[Letter], stats: &KeyStatsMap, target: &Target) -> Self {
+        Self {
+            keys: letters
+                .iter()
+                .map(|l| LessonKey {
+                    is_included: true,
+                    ..LessonKey::new(l, stats, target)
+                })
+                .collect(),
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &LessonKey> {
+        self.keys.iter()
+    }
+
+    pub fn included(&self) -> impl Iterator<Item = &LessonKey> {
+        self.keys.iter().filter(|k| k.is_included)
+    }
+
+    pub fn excluded(&self) -> impl Iterator<Item = &LessonKey> {
+        self.keys.iter().filter(|k| !k.is_included)
+    }
+
+    pub fn focused(&self) -> Option<&LessonKey> {
+        self.keys.iter().find(|k| k.is_focused)
+    }
+
+    pub fn find(&self, cp: u32) -> Option<&LessonKey> {
+        self.keys.iter().find(|k| k.letter.cp == cp)
+    }
+
+    fn key_mut(&mut self, cp: u32) -> &mut LessonKey {
+        self.keys
+            .iter_mut()
+            .find(|k| k.letter.cp == cp)
+            .expect("lesson key")
+    }
+
+    fn include(&mut self, cp: u32) {
+        self.key_mut(cp).is_included = true;
+    }
+
+    fn force(&mut self, cp: u32) {
+        let key = self.key_mut(cp);
+        key.is_included = true;
+        key.is_forced = true;
+    }
+
+    fn focus(&mut self, cp: u32) {
+        let key = self.key_mut(cp);
+        key.is_included = true;
+        key.is_focused = true;
+    }
+}
