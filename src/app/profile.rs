@@ -1269,4 +1269,54 @@ mod tests {
         }
         assert!(text.contains("Lessons           40"), "{text}");
     }
+
+    #[test]
+    fn renders_without_results_and_in_narrow_terminals() {
+        let text = page_text(&Profile::default(), &[], 60);
+        assert!(
+            text.contains("No lessons typed on this layout yet."),
+            "{text}"
+        );
+        assert!(text.contains("You don't have any accuracy"), "{text}");
+        assert!(text.contains("Complete a few lessons"), "{text}");
+        let text = page_text(&Profile::default(), &history(), 50);
+        assert!(text.contains("Practice Calendar"));
+    }
+
+    #[test]
+    fn keys_change_the_view() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let results = history();
+        let mut profile = Profile::default();
+        let key = |c| KeyEvent::new(c, KeyModifiers::NONE);
+        profile.handle_key(key(KeyCode::Right), &results);
+        assert!(page_text(&profile, &results, 110).contains("Key Typing Speed: N"));
+        profile.handle_key(key(KeyCode::Char('c')), &results);
+        assert_eq!(profile.char_class, CharClass::Digits);
+        profile.handle_key(key(KeyCode::Char(']')), &results);
+        assert!((profile.smoothness - 0.6).abs() < 1e-9);
+        assert_eq!(
+            profile.handle_key(key(KeyCode::Char('e')), &results),
+            ProfileAction::Export
+        );
+        assert_eq!(
+            profile.handle_key(key(KeyCode::Char('R')), &results),
+            ProfileAction::None
+        );
+        assert!(profile.confirm_reset);
+        assert_eq!(
+            profile.handle_key(key(KeyCode::Char('n')), &results),
+            ProfileAction::None
+        );
+        assert!(!profile.confirm_reset);
+        profile.handle_key(key(KeyCode::Char('R')), &results);
+        assert_eq!(
+            profile.handle_key(key(KeyCode::Char('y')), &results),
+            ProfileAction::Reset
+        );
+        assert_eq!(
+            profile.handle_key(key(KeyCode::Esc), &results),
+            ProfileAction::Back
+        );
+    }
 }
