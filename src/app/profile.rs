@@ -1319,4 +1319,28 @@ mod tests {
             ProfileAction::Back
         );
     }
+
+    #[test]
+    fn streak_of_days() {
+        let today = NaiveDate::from_ymd_opt(2026, 11, 5).unwrap();
+        let mut days = BTreeMap::new();
+        assert_eq!(current_streak(&days, today), 0);
+        days.insert(today - Duration::days(1), 1000);
+        days.insert(today - Duration::days(2), 1000);
+        days.insert(today - Duration::days(4), 1000);
+        assert_eq!(current_streak(&days, today), 2);
+        days.insert(today, 1000);
+        assert_eq!(current_streak(&days, today), 3);
+    }
+
+    #[test]
+    fn layouts_by_use() {
+        let r = |layout: &str| {
+            let mut r = crate::result::tests::result(0, 300.0, 1.0, &[('a', 200)]);
+            r.layout = layout.into();
+            r
+        };
+        let results = vec![r("en-dvorak"), r("en-us"), r("en-us")];
+        assert_eq!(layouts_in(&results), vec!["en-us", "en-dvorak"]);
+    }
 }
