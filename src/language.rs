@@ -145,3 +145,41 @@ impl Language {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loads_all_languages() {
+        assert_eq!(Language::all().len(), 34);
+        let en = Language::get("en");
+        assert_eq!(en.name, "English");
+        assert_eq!(en.alphabet.len(), 26);
+        assert_eq!(Language::get("nope").id, "en");
+        assert!(Language::get("he").is_rtl());
+        assert!(!en.is_rtl());
+    }
+
+    #[test]
+    fn letter_case() {
+        let en = Language::get("en");
+        assert_eq!(en.capital_case("hELLO"), "Hello");
+        assert_eq!(en.letter_name(u32::from('a')), "A");
+        let tr = Language::get("tr");
+        assert_eq!(tr.upper_case("istanbul"), "İSTANBUL");
+        assert_eq!(tr.lower_case("ILIK"), "ılık");
+        let de = Language::get("de");
+        assert_eq!(de.letter_name(u32::from('ß')), "ẞ");
+    }
+
+    #[test]
+    fn script_ranges() {
+        let en = Language::get("en");
+        assert!(en.includes(u32::from('é')));
+        assert!(!en.includes(u32::from('1')));
+        assert!(en.test("Hello"));
+        assert!(!en.test("héllo"));
+        assert!(Language::get("ru").includes(u32::from('ж')));
+    }
+}
