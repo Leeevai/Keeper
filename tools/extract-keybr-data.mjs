@@ -400,3 +400,29 @@ writeJson("unicode/normalize.json", {
   expand: tableAfter("const expandMap"),
   replace: tableAfter("const replaceMap"),
 });
+
+// ---------------------------------------------------------------------------
+// Source code grammars.
+
+const syntaxDir = path.join(PKG, "keybr-code", "lib", "syntax");
+const grammarFiles = {};
+for (const file of fs.readdirSync(syntaxDir)) {
+  if (file.endsWith(".ts") && file !== "grammars.ts") {
+    const src = fs.readFileSync(path.join(syntaxDir, file), "utf8");
+    grammarFiles[file.replace(/\.ts$/, "")] = parseExport(src);
+  }
+}
+const grammarsSrc = fs.readFileSync(path.join(syntaxDir, "grammars.ts"), "utf8");
+const grammars = {};
+for (const m of grammarsSrc.matchAll(/export const (\w+) = compose\(([^)]*)\)/g)) {
+  grammars[m[1]] = m[2].split(",").map((s) => s.trim());
+}
+for (const [name, rules] of Object.entries(grammarFiles)) {
+  writeJson(`code/${name}.json`, rules);
+}
+const syntaxSrc = read("keybr-code", "lib", "syntax.ts");
+const syntaxes = registryEntries(syntaxSrc, "Syntax").map(({ body }) => {
+  const [id, label, grammar, start = '"start"'] = splitArgs(body);
+  return { id: str(id), name: str(label), grammar: grammars[grammar.trim()], start: str(start) };
+});
+writeJson("code/syntaxes.json", syntaxes);
