@@ -574,4 +574,31 @@ mod tests {
         assert_eq!(dh.shape("KeyZ").unwrap().finger(), Some("ring"));
         assert_eq!(kb.shape("KeyZ").unwrap().finger(), Some("pinky"));
     }
+
+    #[test]
+    fn falls_back_to_a_supported_geometry() {
+        let kb = Keyboard::new(Layout::get("en-colemak-dh-matrix"), "ansi101", "standard");
+        assert_eq!(kb.geometry.id, "matrix");
+    }
+
+    #[test]
+    fn emulates_layouts_by_key_position() {
+        let system = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+        let colemak = Keyboard::new(Layout::get("en-colemak"), "ansi101", "standard");
+        // QWERTY "e" is at KeyE, which is "f" on Colemak.
+        assert_eq!(colemak.emulate(&system, cp('e')), cp('f'));
+        assert_eq!(colemak.emulate(&system, cp('E')), cp('F'));
+        assert_eq!(colemak.emulate(&system, cp('a')), cp('a'));
+        assert_eq!(colemak.emulate(&system, cp('é')), cp('é'));
+    }
+
+    #[test]
+    fn selectable_layouts_put_the_language_first() {
+        let de = Language::get("de");
+        let list = Layout::selectable(de);
+        assert_eq!(list[0].language, "de");
+        assert!(list.iter().any(|l| l.id == "en-us"));
+        assert!(list.iter().all(|l| l.language().script == de.script));
+        assert_eq!(Layout::select(Language::get("ru")).id, "ru-ru");
+    }
 }
