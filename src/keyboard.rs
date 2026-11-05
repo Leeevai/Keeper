@@ -504,3 +504,74 @@ fn add_dead_combos(map: &mut ComboMap, dead: u32, key: &str, modifier: Modifier)
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cp(c: char) -> u32 {
+        u32::from(c)
+    }
+
+    #[test]
+    fn loads_layouts_and_geometries() {
+        assert_eq!(Layout::all().len(), 100);
+        assert_eq!(Geometry::all().len(), 11);
+        for layout in Layout::all() {
+            assert!(Language::find(&layout.language).is_some(), "{}", layout.id);
+            assert!(!layout.geometries.is_empty(), "{}", layout.id);
+            let keyboard = Keyboard::new(layout, &layout.geometries[0], "standard");
+            assert!(keyboard.code_points().set.len() > 20, "{}", layout.id);
+        }
+        assert_eq!(Layout::get("nope").id, "en-us");
+        assert_eq!(Layout::get("en-us").full_name(), "English/United States");
+    }
+
+    #[test]
+    fn us_layout_combos() {
+        let kb = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+        let a = kb.combo(cp('a')).unwrap();
+        assert_eq!((a.key.as_str(), a.modifier), ("KeyA", Modifier::None));
+        let upper = kb.combo(cp('A')).unwrap();
+        assert!(upper.needs_shift());
+        assert_eq!(upper.modifier_count(), 1);
+        assert_eq!(kb.combo(cp(' ')).unwrap().key, "Space");
+        let set = kb.code_points();
+        assert!(set.has(cp('a')) && set.has(cp('~')) && !set.has(cp('é')));
+        assert_eq!(set.weight(cp('a')), 1);
+        assert_eq!(set.weight(cp('q')), 2);
+        assert_eq!(set.weight(cp('z')), 1000);
+    }
+
+    #[test]
+    fn dead_keys_compose_accented_letters() {
+        let kb = Keyboard::new(Layout::get("cs-cz"), "iso102", "standard");
+        let combo = kb.combo(cp('ě')).expect("ě is typed directly");
+        assert!(combo.prefix.is_none());
+        let accented = kb.combo(cp('ň')).expect("ň is typed with a dead caron");
+        assert_eq!(accented.prefix.as_ref().unwrap().cp, 0x030c);
+        assert!(kb.code_points().has(cp('ň')));
+    }
+
+    #[test]
+    fn zones_and_rows() {
+        let kb = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+        let f = kb.shape("KeyF").unwrap();
+        assert_eq!(
+            (f.finger(), f.hand(), f.row()),
+            (Some("leftIndex"), Some("left"), Some("home"))
+        );
+        assert!(f.homing);
+        let symmetric = Keyboard::new(Layout::get("en-us"), "ansi101", "symmetric");
+        let changed = kb
+            .shapes
+            .iter()
+            .zip(&symmetric.shapes)
+            .any(|(a, b)| a.zones != b.zones);
+        assert!(changed);
+        // Colemak-DH remaps zones on staggered keyboards.
+        let dh = Keyboard::new(Layout::get("en-colemak-dh"), "ansi101", "standard");
+        assert_eq!(dh.shape("KeyZ").unwrap().finger(), Some("ring"));
+        assert_eq!(kb.shape("KeyZ").unwrap().finger(), Some("pinky"));
+    }
+}
