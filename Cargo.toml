@@ -12,9 +12,15 @@ default-run = "keeper"
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dirs = "6"
+rodio = { version = "0.23", default-features = false, features = ["playback", "mp3"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 unicode-normalization = "0.1"
+
+[features]
+default = ["sound"]
+# Typing sounds, played with the system audio output.
+sound = ["dep:rodio"]
 
 [dev-dependencies]
 tempfile = "3"

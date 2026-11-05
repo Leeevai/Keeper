@@ -10,6 +10,7 @@ pub mod phonetic;
 pub mod result;
 pub mod rng;
 pub mod settings;
+pub mod sound;
 pub mod stats;
 pub mod storage;
 pub mod textinput;
