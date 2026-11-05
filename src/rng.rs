@@ -66,3 +66,77 @@ pub fn weighted_random_sample<'a, T>(
     }
     &list[list.len() - 1]
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    /// A fake generator that cycles through the given values.
+    pub struct FakeRng {
+        values: Vec<f64>,
+        index: usize,
+    }
+
+    impl FakeRng {
+        pub fn new(values: &[f64]) -> Self {
+            Self {
+                values: values.to_vec(),
+                index: 0,
+            }
+        }
+    }
+
+    impl Rng for FakeRng {
+        fn next_f64(&mut self) -> f64 {
+            let v = self.values[self.index % self.values.len()];
+            self.index += 1;
+            v
+        }
+    }
+
+    #[test]
+    fn lcg_is_deterministic_and_in_range() {
+        let mut a = Lcg::new(42);
+        let mut b = Lcg::new(42);
+        for _ in 0..10_000 {
+            let v = a.next_f64();
+            assert_eq!(v, b.next_f64());
+            assert!((0.0..1.0).contains(&v));
+        }
+        assert_ne!(Lcg::new(1).next_f64(), Lcg::new(2).next_f64());
+    }
+
+    #[test]
+    fn lcg_is_roughly_uniform() {
+        let mut rng = Lcg::new(7);
+        let mut buckets = [0u32; 10];
+        for _ in 0..100_000 {
+            buckets[(rng.next_f64() * 10.0) as usize] += 1;
+        }
+        for count in buckets {
+            assert!((9_000..11_000).contains(&count), "{buckets:?}");
+        }
+    }
+
+    #[test]
+    fn samples() {
+        let list = ["a", "b", "c", "d"];
+        assert_eq!(*random_sample(&list, &mut FakeRng::new(&[0.0])), "a");
+        assert_eq!(*random_sample(&list, &mut FakeRng::new(&[0.5])), "c");
+        assert_eq!(*random_sample(&list, &mut FakeRng::new(&[0.99])), "d");
+        let weighted = [("a", 1.0), ("b", 0.0), ("c", 3.0)];
+        let w = |v: &(&str, f64)| v.1;
+        assert_eq!(
+            weighted_random_sample(&weighted, w, &mut FakeRng::new(&[0.0])).0,
+            "a"
+        );
+        assert_eq!(
+            weighted_random_sample(&weighted, w, &mut FakeRng::new(&[0.3])).0,
+            "c"
+        );
+        assert_eq!(
+            weighted_random_sample(&weighted, w, &mut FakeRng::new(&[0.99])).0,
+            "c"
+        );
+    }
+}
