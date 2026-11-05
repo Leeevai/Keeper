@@ -418,3 +418,129 @@ defaults! {
     d_zones: String = "standard".into();
     d_theme: String = "system".into();
 }
+
+/// The settings, serialized as a flat object with keybr.com's keys.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Settings {
+    // ----- Lessons -----
+    #[serde(rename = "lesson.type", default)]
+    pub lesson_type: LessonType,
+    /// 0 to 1, adds up to 100 characters to the lessons.
+    #[serde(rename = "lesson.length", default)]
+    pub lesson_length: f64,
+    #[serde(rename = "lesson.guided.naturalWords", default = "d_true")]
+    pub natural_words: bool,
+    #[serde(rename = "lesson.guided.keyboardOrder", default)]
+    pub keyboard_order: bool,
+    /// 0 to 1, manually unlocks letters.
+    #[serde(rename = "lesson.guided.alphabetSize", default)]
+    pub alphabet_size: f64,
+    #[serde(rename = "lesson.guided.recoverKeys", default)]
+    pub recover_keys: bool,
+    #[serde(rename = "lesson.wordList.wordListSize", default = "d_word_list_size")]
+    pub word_list_size: u32,
+    #[serde(rename = "lesson.wordList.longWordsOnly", default)]
+    pub long_words_only: bool,
+    #[serde(rename = "lesson.books.book", default = "d_book")]
+    pub book: String,
+    #[serde(rename = "lesson.books.paragraphIndex", default)]
+    pub paragraph_index: u32,
+    #[serde(rename = "lesson.books.lettersOnly", default)]
+    pub book_letters_only: bool,
+    #[serde(rename = "lesson.books.lowercase", default)]
+    pub book_lowercase: bool,
+    #[serde(rename = "lesson.customText.content", default = "d_custom_text")]
+    pub custom_text: String,
+    #[serde(rename = "lesson.customText.lettersOnly", default = "d_true")]
+    pub custom_letters_only: bool,
+    #[serde(rename = "lesson.customText.lowercase", default = "d_true")]
+    pub custom_lowercase: bool,
+    #[serde(rename = "lesson.customText.randomize", default)]
+    pub custom_randomize: bool,
+    #[serde(rename = "lesson.numbers.benford", default = "d_true")]
+    pub benford: bool,
+    #[serde(rename = "lesson.code.syntax", default = "d_syntax")]
+    pub code_syntax: String,
+    #[serde(rename = "lesson.code.flags", default)]
+    pub code_flags: Vec<String>,
+    /// 0 to 1, the share of capitalized words.
+    #[serde(rename = "lesson.capitals", default)]
+    pub capitals: f64,
+    /// 0 to 1, the share of words with punctuation.
+    #[serde(rename = "lesson.punctuators", default)]
+    pub punctuators: f64,
+    #[serde(rename = "lesson.repeatWords", default = "d_repeat_words")]
+    pub repeat_words: u32,
+    /// Characters per minute.
+    #[serde(rename = "lesson.targetSpeed", default = "d_target_speed")]
+    pub target_speed: u32,
+    /// Minutes per day, zero when not set.
+    #[serde(rename = "lesson.dailyGoal", default = "d_daily_goal")]
+    pub daily_goal: u32,
+
+    // ----- Typing -----
+    #[serde(rename = "textInput.stopOnError", default = "d_true")]
+    pub stop_on_error: bool,
+    #[serde(rename = "textInput.forgiveErrors", default = "d_true")]
+    pub forgive_errors: bool,
+    #[serde(rename = "textInput.spaceSkipsWords", default)]
+    pub space_skips_words: bool,
+    #[serde(rename = "textDisplay.caretShapeStyle", default)]
+    pub caret_shape: CaretShape,
+    #[serde(rename = "textDisplay.whitespaceStyle", default)]
+    pub whitespace_style: WhitespaceStyle,
+    #[serde(rename = "textInput.playSounds", default)]
+    pub play_sounds: PlaySounds,
+    #[serde(rename = "textInput.soundVolume", default = "d_sound_volume")]
+    pub sound_volume: f64,
+    #[serde(rename = "textInput.soundTheme", default)]
+    pub sound_theme: SoundTheme,
+
+    // ----- Keyboard -----
+    #[serde(rename = "keyboard.language", default = "d_language")]
+    pub language: String,
+    #[serde(rename = "keyboard.layout", default = "d_layout")]
+    pub layout: String,
+    #[serde(rename = "keyboard.geometry", default = "d_geometry")]
+    pub geometry: String,
+    #[serde(rename = "keyboard.zones", default = "d_zones")]
+    pub zones: String,
+    #[serde(rename = "keyboard.emulation", default)]
+    pub emulation: Emulation,
+    /// Color the keyboard by finger zones.
+    #[serde(rename = "keyboard.colors", default = "d_true")]
+    pub keyboard_colors: bool,
+    /// Highlight the key to press next.
+    #[serde(rename = "keyboard.pointers", default = "d_true")]
+    pub keyboard_pointers: bool,
+    /// The layout configured in the operating system, used for emulation.
+    #[serde(rename = "keyboard.systemLayout", default = "d_layout")]
+    pub system_layout: String,
+    #[serde(rename = "prefs.practice.view", default)]
+    pub view: View,
+
+    // ----- Miscellaneous -----
+    #[serde(rename = "ui.speedUnit", default)]
+    pub speed_unit: SpeedUnit,
+    #[serde(rename = "ui.theme", default = "d_theme")]
+    pub theme: String,
+    #[serde(rename = "ui.colorMode", default)]
+    pub color_mode: ColorMode,
+
+    // ----- Typing test -----
+    #[serde(rename = "typingTest.textSource.type", default)]
+    pub test_source: TestSource,
+    #[serde(rename = "typingTest.textSource.language", default = "d_language")]
+    pub test_language: String,
+    #[serde(
+        rename = "typingTest.wordList.wordListSize",
+        default = "d_word_list_size"
+    )]
+    pub test_word_list_size: u32,
+    #[serde(rename = "typingTest.book", default = "d_book")]
+    pub test_book: String,
+    #[serde(rename = "typingTest.book.paragraphIndex", default)]
+    pub test_paragraph_index: u32,
+    #[serde(rename = "typingTest.duration", default)]
+    pub test_duration: TestDuration,
+}
