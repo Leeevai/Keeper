@@ -698,4 +698,57 @@ pub mod tests {
             (20.0, 10.0, 10.0, 20.0, 15.0)
         );
     }
+
+    fn acc(values: &[f64]) -> Vec<TypingResult> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, &a)| result(i as i64, 300.0, a, &[('a', 200), ('b', 200), ('c', 200)]))
+            .collect()
+    }
+
+    #[test]
+    fn current_streaks() {
+        let mut list = StreakList::default();
+        for r in &acc(&[1.0, 0.98, 0.96]) {
+            list.append(r);
+        }
+        let streaks = list.streaks();
+        assert_eq!(streaks[0].results.len(), 0);
+        assert_eq!(streaks[1].results.len(), 0);
+        assert_eq!(streaks[2].results.len(), 3);
+        list.append(&acc(&[1.0])[0]);
+        let streaks = list.streaks();
+        // The new lesson starts a 100% streak and extends the 95% one.
+        assert_eq!(streaks[0].results.len(), 1);
+        assert_eq!(streaks[1].results.len(), 0);
+        assert_eq!(streaks[2].results.len(), 4);
+    }
+
+    #[test]
+    fn longest_streaks() {
+        let results = acc(&[
+            1.0, 1.0, 0.5, 1.0, 0.98, 0.98, 0.98, 0.5, 0.96, 0.96, 0.96, 0.96, 0.96,
+        ]);
+        let longest = StreakList::find_longest(&results);
+        let lengths: Vec<(f64, usize)> =
+            longest.iter().map(|s| (s.level, s.results.len())).collect();
+        assert_eq!(lengths, vec![(1.0, 2), (0.97, 4), (0.95, 5)]);
+        assert!(StreakList::find_longest(&acc(&[0.5, 0.6])).is_empty());
+    }
+
+    #[test]
+    fn daily_stats_and_goal() {
+        let day = 86_400_000;
+        let results = vec![
+            result(0, 300.0, 1.0, &[('a', 200)]),
+            result(day * 3, 300.0, 1.0, &[('a', 200)]),
+        ];
+        let days = daily_stats(&results);
+        assert_eq!(days.len(), 2);
+        let today = results[1].local_date();
+        let goal = DailyGoal::compute(1, today, &results);
+        assert!((goal.value - results[1].time as f64 / 60_000.0).abs() < 1e-9);
+        assert_eq!(DailyGoal::compute(0, today, &results).value, 0.0);
+    }
 }
