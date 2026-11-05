@@ -83,6 +83,64 @@ impl Source {
     }
 }
 
+/// The outcome of a finished test.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Report {
+    pub result: TestResult,
+    /// Speed over the test, in characters per minute per two seconds.
+    pub speeds: Vec<f64>,
+}
+
+pub struct TypingTest {
+    source: Source,
+    rng: Lcg,
+    duration: TestDuration,
+    source_id: String,
+    lines: Vec<String>,
+    /// What was typed on the lines above the active one.
+    typed: Vec<Option<Vec<Char>>>,
+    active: usize,
+    input: TextInput,
+    steps: Vec<Step>,
+    last_input: f64,
+    pub report: Option<Report>,
+}
+
+impl TypingTest {
+    pub fn new(settings: &Settings) -> Self {
+        Self::with_rng(settings, Lcg::from_time())
+    }
+
+    pub fn with_rng(settings: &Settings, mut rng: Lcg) -> Self {
+        let mut source = Source::new(settings);
+        let lines: Vec<String> = (0..NUM_LINES)
+            .map(|_| generate_line(&mut source, &mut rng))
+            .collect();
+        let input = TextInput::new(plain(lines[0].clone()), settings.text_input());
+        Self {
+            source,
+            rng,
+            duration: settings.test_duration,
+            source_id: id_of(settings.test_source),
+            typed: vec![None; NUM_LINES],
+            lines,
+            active: 0,
+            input,
+            steps: Vec::new(),
+            last_input: 0.0,
+            report: None,
+        }
+    }
+
+    /// The next character to type.
+    pub fn next_char(&self) -> Option<char> {
+        self.input
+            .remaining()
+            .first()
+            .and_then(|&cp| char::from_u32(cp))
+    }
+}
+
 /// The serialized name of a setting value, e.g. `seconds15`.
 fn id_of<T: serde::Serialize>(value: T) -> String {
     serde_json::to_value(value)
@@ -128,4 +186,23 @@ fn generate_line(source: &mut Source, rng: &mut Lcg) -> String {
         words += 1;
     }
     line
+}
+
+/// Typing speed in two second windows.
+fn speed_series(steps: &[Step]) -> Vec<f64> {
+    let Some(first) = steps.first() else {
+        return Vec::new();
+    };
+    let window = 2000.0;
+    let end = steps.last().map_or(0.0, |s| s.time_stamp);
+    let buckets = (((end - first.time_stamp) / window).ceil() as usize).max(1);
+    let mut counts = vec![0usize; buckets];
+    for step in steps {
+        let i = (((step.time_stamp - first.time_stamp) / window) as usize).min(buckets - 1);
+        counts[i] += 1;
+    }
+    counts
+        .into_iter()
+        .map(|n| n as f64 / (window / 1000.0) * 60.0)
+        .collect()
 }
