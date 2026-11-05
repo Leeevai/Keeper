@@ -301,3 +301,36 @@ fn every_screen_renders() {
     );
     assert!(term.quit());
 }
+
+#[test]
+fn settings_change_the_lesson_and_are_saved() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 42, 130);
+    term.send(F4);
+    // Lesson type: guided lessons → common words.
+    term.send(RIGHT);
+    assert!(term.wait_for("Common words", Duration::from_secs(3)));
+    term.send(ESC);
+    assert!(
+        term.wait_for(
+            "Common words · English · United States",
+            Duration::from_secs(3)
+        ),
+        "{}",
+        term.screen()
+    );
+    let settings = std::fs::read_to_string(home.path().join("settings.json")).unwrap();
+    assert!(
+        settings.contains(r#""lesson.type": "wordlist""#),
+        "{settings}"
+    );
+    assert!(term.quit());
+    let mut term = Term::start(home.path(), 42, 130);
+    assert!(
+        term.screen()
+            .contains("Common words · English · United States"),
+        "{}",
+        term.screen()
+    );
+    assert!(term.quit());
+}
