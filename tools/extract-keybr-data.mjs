@@ -389,3 +389,14 @@ for (const book of books) {
   writeJson(`books/${book.id}.json`, JSON.parse(fs.readFileSync(path.join(booksDir, `${book.id}.json`), "utf8")));
 }
 writeJson("books/books.json", books);
+
+const normalizeSrc = read("keybr-unicode", "lib", "normalize.ts");
+const tableAfter = (marker) => {
+  const at = normalizeSrc.indexOf(marker);
+  const start = normalizeSrc.indexOf("})([", at) + 3;
+  return JSON.parse(literalToJson(normalizeSrc.slice(start, literalEnd(normalizeSrc, start))));
+};
+writeJson("unicode/normalize.json", {
+  expand: tableAfter("const expandMap"),
+  replace: tableAfter("const replaceMap"),
+});
