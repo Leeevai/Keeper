@@ -116,4 +116,69 @@ impl Practice {
             InputAction::ClearWord => self.input.clear_word(),
         }
     }
+
+    pub fn completed(&self) -> bool {
+        self.input.completed()
+    }
+
+    pub fn stats(&self) -> Stats {
+        make_stats(&self.input.steps())
+    }
+
+    /// Adds a new result and returns the notifications it causes.
+    pub fn accept(
+        &mut self,
+        result: &TypingResult,
+        unit: crate::settings::SpeedUnit,
+    ) -> Vec<String> {
+        let mut events = Vec::new();
+        self.key_stats.append(result);
+        self.summary.append(result);
+        self.streaks.append(result);
+        self.lesson_keys = self.lesson.update(&self.key_stats);
+        for key in self.lesson_keys.included() {
+            if self.included.insert(key.letter.cp) {
+                events.push(format!("New key unlocked: {}", key.letter.label));
+            }
+        }
+        if result.speed > self.top_speed {
+            if self.summary.count >= 3 {
+                events.push(format!(
+                    "New top speed: {} (was {})",
+                    unit.format(result.speed),
+                    unit.format(self.top_speed)
+                ));
+            }
+            self.top_speed = result.speed;
+        }
+        if result.score > self.top_score {
+            if self.summary.count >= 3 {
+                events.push(format!(
+                    "New top score: {} (was {})",
+                    crate::ui::thousands(result.score),
+                    crate::ui::thousands(self.top_score)
+                ));
+            }
+            self.top_score = result.score;
+        }
+        events
+    }
+
+    /// Generates the text of a new lesson.
+    pub fn next_lesson(&mut self) {
+        let text = self.lesson.generate(&self.lesson_keys, &mut self.rng);
+        self.input = TextInput::new(text, self.input.settings);
+    }
+
+    /// Starts the same text over.
+    pub fn restart(&mut self) {
+        self.input.reset();
+    }
+
+    /// The code points of the lesson, used to dim the other keys.
+    fn active_code_points(&self) -> HashSet<u32> {
+        let mut set: HashSet<u32> = self.lesson_keys.included().map(|k| k.letter.cp).collect();
+        set.insert(0x20);
+        set
+    }
 }
