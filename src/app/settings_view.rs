@@ -1275,4 +1275,67 @@ mod tests {
         press(&mut view, &mut s, KeyCode::PageDown);
         assert_eq!(view.selected, fields(&s).len() - 1);
     }
+
+    #[test]
+    fn reset_needs_confirmation() {
+        let mut view = SettingsView::default();
+        let mut s = Settings {
+            target_speed: 300,
+            ..Settings::default()
+        };
+        assert_eq!(
+            press(&mut view, &mut s, KeyCode::Char('r')),
+            SettingsAction::None
+        );
+        assert_eq!(
+            press(&mut view, &mut s, KeyCode::Char('n')),
+            SettingsAction::None
+        );
+        assert_eq!(s.target_speed, 300);
+        press(&mut view, &mut s, KeyCode::Char('r'));
+        press(&mut view, &mut s, KeyCode::Char('y'));
+        assert_eq!(s, Settings::default());
+    }
+
+    #[test]
+    fn custom_text_editor() {
+        let mut view = SettingsView::default();
+        let mut s = Settings {
+            lesson_type: LessonType::Custom,
+            ..Settings::default()
+        };
+        select(&mut view, &s, Field::CustomText);
+        press(&mut view, &mut s, KeyCode::Enter);
+        assert!(view.editor.is_some());
+        view.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL), &s);
+        view.handle_paste("Hello\r\nWorld");
+        press(&mut view, &mut s, KeyCode::Char('!'));
+        assert_eq!(view.editor.as_ref().unwrap().text(), "Hello\nWorld!");
+        let action = view.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL), &s);
+        let SettingsAction::Apply(new) = action else {
+            panic!("expected apply")
+        };
+        assert_eq!(new.custom_text, "Hello\nWorld!");
+        assert!(view.editor.is_none());
+        // Escape cancels.
+        press(&mut view, &mut s, KeyCode::Enter);
+        press(&mut view, &mut s, KeyCode::Char('x'));
+        assert_eq!(press(&mut view, &mut s, KeyCode::Esc), SettingsAction::None);
+        assert!(view.editor.is_none());
+    }
+
+    #[test]
+    fn editor_moves_between_lines() {
+        let mut e = Editor::new("ab\ncde");
+        e.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(e.cursor, 2);
+        e.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        assert_eq!(e.cursor, 0);
+        e.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert_eq!(e.cursor, 3);
+        e.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        assert_eq!(e.cursor, 6);
+        e.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert_eq!(e.text(), "ab\ncd");
+    }
 }
