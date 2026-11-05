@@ -1000,4 +1000,54 @@ mod tests {
         let text = flatten(&long.generate(&keys, &mut Lcg::new(1)));
         assert!(text.split(' ').all(|w| w.chars().count() > 3), "{text}");
     }
+
+    #[test]
+    fn book_lessons_continue_through_the_book() {
+        let mut lesson = Lesson::new(&settings(|s| s.lesson_type = LessonType::Books));
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        let first = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+        assert!(
+            first.starts_with("Alice was beginning to get very tired"),
+            "{first}"
+        );
+        let second = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+        assert_ne!(first, second);
+        let mut lower = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Books;
+            s.book_lowercase = true;
+            s.book_letters_only = true;
+            s.paragraph_index = 1;
+        }));
+        let text = flatten(&lower.generate(&keys, &mut Lcg::new(1)));
+        assert!(text.starts_with("so she was considering"), "{text}");
+        assert!(text.chars().all(|c| c.is_lowercase() || c == ' '), "{text}");
+    }
+
+    #[test]
+    fn custom_text_lessons() {
+        let mut lesson = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Custom;
+            s.custom_text = "Hello, World! Typing is fun.".into();
+        }));
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+        assert!(
+            text.starts_with("hello world typing is fun hello"),
+            "{text}"
+        );
+        let mut raw = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Custom;
+            s.custom_text = "Hello, World!".into();
+            s.custom_letters_only = false;
+            s.custom_lowercase = false;
+        }));
+        assert!(
+            flatten(&raw.generate(&keys, &mut Lcg::new(1))).starts_with("Hello, World! Hello,")
+        );
+        let mut empty = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Custom;
+            s.custom_text = String::new();
+        }));
+        assert!(flatten(&empty.generate(&keys, &mut Lcg::new(1))).starts_with("? ?"));
+    }
 }
