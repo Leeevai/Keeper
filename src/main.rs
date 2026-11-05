@@ -45,6 +45,35 @@ enum Command {
     Path,
 }
 
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let storage = Storage::open(cli.data_dir)?;
+    match cli.command {
+        None => run(storage),
+        Some(Command::Stats) => print_stats(&storage),
+        Some(Command::Export { file }) => {
+            let results = storage.load_results()?;
+            storage.export_results(&results, &file)?;
+            println!("Exported {} results to {}", results.len(), file.display());
+            Ok(())
+        }
+        Some(Command::Import { file }) => {
+            let existing = storage.load_results()?;
+            let added = storage.import_results(&existing, &file)?;
+            println!(
+                "Imported {} new results from {}",
+                added.len(),
+                file.display()
+            );
+            Ok(())
+        }
+        Some(Command::Path) => {
+            println!("{}", storage.dir().display());
+            Ok(())
+        }
+    }
+}
+
 fn print_stats(storage: &Storage) -> Result<()> {
     let results = storage.load_results()?;
     let settings: Settings = storage.load_settings();
@@ -157,8 +186,4 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<
         }
     }
     Ok(())
-}
-
-fn main() {
-    println!("keeper {}", env!("CARGO_PKG_VERSION"));
 }
