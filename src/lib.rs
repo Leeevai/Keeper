@@ -2,6 +2,7 @@
 
 pub mod assets;
 pub mod code;
+pub mod content;
 pub mod keyboard;
 pub mod language;
 pub mod phonetic;
