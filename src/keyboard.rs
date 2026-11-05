@@ -267,3 +267,52 @@ impl Modifier {
         Modifier::ShiftAlt,
     ];
 }
+
+/// The key presses required to type a character.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyCombo {
+    pub cp: u32,
+    pub key: KeyId,
+    pub modifier: Modifier,
+    /// A dead key to press first.
+    pub prefix: Option<Box<KeyCombo>>,
+}
+
+impl KeyCombo {
+    pub fn complexity(&self) -> u32 {
+        let own = 1 + self.modifier.complexity();
+        own + self.prefix.as_ref().map_or(0, |p| p.complexity())
+    }
+
+    pub fn needs_shift(&self) -> bool {
+        self.modifier.shift() || self.prefix.as_ref().is_some_and(|p| p.needs_shift())
+    }
+
+    pub fn needs_alt(&self) -> bool {
+        self.modifier.alt() || self.prefix.as_ref().is_some_and(|p| p.needs_alt())
+    }
+
+    /// The number of modifier keys pressed to type the character.
+    pub fn modifier_count(&self) -> u32 {
+        self.modifier.complexity() + self.prefix.as_ref().map_or(0, |p| p.modifier_count() + 1)
+    }
+}
+
+/// A set of typeable code points with a weight for each one,
+/// lighter keys are easier to reach.
+#[derive(Debug, Clone, Default)]
+pub struct CodePointSet {
+    pub set: BTreeSet<u32>,
+    weights: HashMap<u32, u32>,
+}
+
+impl CodePointSet {
+    pub fn has(&self, cp: u32) -> bool {
+        self.set.contains(&cp)
+    }
+
+    /// Home row keys weigh 1, top row keys 2, everything else 1000.
+    pub fn weight(&self, cp: u32) -> u32 {
+        self.weights.get(&cp).copied().unwrap_or(1000)
+    }
+}
