@@ -732,3 +732,99 @@ pub struct SettingsView {
     pub confirm_reset: bool,
     preview: RefCell<Option<(Settings, String)>>,
 }
+
+impl SettingsView {
+    pub fn handle_key(&mut self, key: KeyEvent, settings: &Settings) -> SettingsAction {
+        if let Some(editor) = &mut self.editor {
+            return match editor.handle_key(key) {
+                Some(true) => {
+                    let text = editor.text();
+                    self.editor = None;
+                    SettingsAction::Apply(Box::new(Settings {
+                        custom_text: text,
+                        ..settings.clone()
+                    }))
+                }
+                Some(false) => {
+                    self.editor = None;
+                    SettingsAction::None
+                }
+                None => SettingsAction::None,
+            };
+        }
+        if self.confirm_reset {
+            self.confirm_reset = false;
+            if matches!(key.code, KeyCode::Char('y' | 'Y')) {
+                return SettingsAction::Apply(Box::default());
+            }
+            return SettingsAction::None;
+        }
+        let list = fields(settings);
+        self.selected = self.selected.min(list.len() - 1);
+        let field = list[self.selected].1;
+        let big = key.modifiers.contains(KeyModifiers::SHIFT);
+        let change = |delta: i32| {
+            let mut s = settings.clone();
+            field.change(&mut s, if big { delta * 10 } else { delta });
+            SettingsAction::Apply(Box::new(s))
+        };
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => SettingsAction::Back,
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.selected = self.selected.saturating_sub(1);
+                SettingsAction::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.selected = (self.selected + 1).min(list.len() - 1);
+                SettingsAction::None
+            }
+            KeyCode::PageUp => {
+                // The start of this section, or of the previous one.
+                let start_of = |i: usize| {
+                    (0..=i)
+                        .rev()
+                        .take_while(|&j| list[j].0 == list[i].0)
+                        .last()
+                        .unwrap_or(i)
+                };
+                let start = start_of(self.selected);
+                self.selected = if start == self.selected && start > 0 {
+                    start_of(start - 1)
+                } else {
+                    start
+                };
+                SettingsAction::None
+            }
+            KeyCode::PageDown => {
+                let section = list[self.selected].0;
+                self.selected = (self.selected..list.len())
+                    .find(|&i| list[i].0 != section)
+                    .unwrap_or(list.len() - 1);
+                SettingsAction::None
+            }
+            KeyCode::Home => {
+                self.selected = 0;
+                SettingsAction::None
+            }
+            KeyCode::End => {
+                self.selected = list.len() - 1;
+                SettingsAction::None
+            }
+            KeyCode::Left | KeyCode::Char('h' | '-') => change(-1),
+            KeyCode::Right | KeyCode::Char('l' | '+' | '=') => change(1),
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                if field == Field::CustomText {
+                    self.editor = Some(Editor::new(&settings.custom_text));
+                    SettingsAction::None
+                } else {
+                    change(1)
+                }
+            }
+            KeyCode::Char('r') => {
+                self.confirm_reset = true;
+                SettingsAction::None
+            }
+            _ => SettingsAction::None,
+        }
+    }
+}
