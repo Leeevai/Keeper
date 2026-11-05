@@ -26,7 +26,9 @@ default = ["sound"]
 sound = ["dep:rodio"]
 
 [dev-dependencies]
+portable-pty = "0.9"
 tempfile = "3"
+vt100 = "0.18"
 
 [profile.release]
 lto = "thin"
