@@ -672,4 +672,63 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn the_caret_stays_visible_in_narrow_terminals() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let settings = Settings {
+            test_duration: TestDuration::Chars1000,
+            ..Settings::default()
+        };
+        let mut test = TypingTest::with_rng(&settings, Lcg::new(6));
+        let n = test.lines[0].chars().count() - 3;
+        type_text(&mut test, n, 0.0, 100.0);
+        let styles = crate::ui::Styles::new(
+            crate::theme::Theme::get("light"),
+            crate::settings::ColorMode::Truecolor,
+        );
+        let ctx = RenderContext {
+            styles: &styles,
+            settings: &settings,
+            daily_goal: crate::result::DailyGoal {
+                goal: 0,
+                value: 0.0,
+            },
+            toast: None,
+            now: n as f64 * 100.0,
+            focused: true,
+            data_dir: std::path::PathBuf::new(),
+        };
+        for width in [30, 45, 61, 80] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 20)).unwrap();
+            terminal
+                .draw(|f| test.render(f, f.area(), &ctx, &[]))
+                .unwrap();
+            let buf = terminal.backend().buffer();
+            let underlined = (0..buf.area.height)
+                .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+                .any(|(x, y)| {
+                    buf[(x, y)]
+                        .modifier
+                        .contains(ratatui::style::Modifier::UNDERLINED)
+                });
+            assert!(underlined, "no caret at width {width}");
+        }
+    }
+
+    #[test]
+    fn keys_after_the_deadline_do_not_count() {
+        let settings = Settings {
+            test_duration: TestDuration::Seconds15,
+            ..Settings::default()
+        };
+        let mut test = TypingTest::with_rng(&settings, Lcg::new(7));
+        type_text(&mut test, 40, 0.0, 200.0);
+        // The first key was at 200ms, the time is up at 15200ms.
+        let next = test.input.remaining()[0];
+        assert!(test.handle(InputAction::Char(next), 15_250.0).is_none());
+        let report = test.report.as_ref().expect("the test is over");
+        assert_eq!(report.result.length, 40);
+    }
 }
