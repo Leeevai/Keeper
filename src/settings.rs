@@ -395,3 +395,26 @@ impl TestDuration {
         }
     }
 }
+
+macro_rules! defaults {
+    ($($name:ident: $ty:ty = $value:expr;)*) => {
+        $(fn $name() -> $ty { $value })*
+    };
+}
+
+defaults! {
+    d_true: bool = true;
+    d_word_list_size: u32 = 1000;
+    d_book: String = "en-alice-wonderland".into();
+    d_custom_text: String = "The quick brown fox jumps over the lazy dog.".into();
+    d_syntax: String = "html".into();
+    d_repeat_words: u32 = 1;
+    d_target_speed: u32 = 175;
+    d_daily_goal: u32 = 30;
+    d_sound_volume: f64 = 0.5;
+    d_language: String = "en".into();
+    d_layout: String = "en-us".into();
+    d_geometry: String = "ansi101".into();
+    d_zones: String = "standard".into();
+    d_theme: String = "system".into();
+}
