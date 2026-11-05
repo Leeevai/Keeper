@@ -628,4 +628,48 @@ mod tests {
         assert_eq!(report.result.source, "commonWords");
         assert!(!report.speeds.is_empty());
     }
+
+    #[test]
+    fn a_timed_test_finishes_on_time() {
+        let settings = Settings {
+            test_duration: TestDuration::Seconds15,
+            ..Settings::default()
+        };
+        let mut test = TypingTest::with_rng(&settings, Lcg::new(3));
+        assert!(!test.tick(100_000.0));
+        let now = type_text(&mut test, 40, 0.0, 200.0);
+        assert!(test.report.is_none());
+        assert!(!test.tick(now + 1000.0));
+        // The clock starts at the first key press, 200ms in.
+        assert!(!test.tick(200.0 + 14_999.0));
+        assert!(test.tick(200.0 + 15_000.0));
+        let report = test.report.as_ref().unwrap();
+        assert_eq!(report.result.length, 40);
+        // The speed is measured over the whole 15 seconds.
+        assert_eq!(report.result.time, 15_000);
+        assert!((report.result.speed - 40.0 / 15.0 * 60.0).abs() < 1e-9);
+        // Input after the end is ignored.
+        assert!(
+            test.handle(InputAction::Char(u32::from('a')), 20_000.0)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn lines_fit_in_columns_with_wide_characters() {
+        use unicode_width::UnicodeWidthStr;
+        let settings = Settings {
+            test_source: TestSource::PseudoWords,
+            test_language: "ja".into(),
+            ..Settings::default()
+        };
+        let test = TypingTest::with_rng(&settings, Lcg::new(5));
+        for line in &test.lines {
+            assert!(
+                line.width() <= NUM_COLS + 1,
+                "{} columns: {line}",
+                line.width()
+            );
+        }
+    }
 }
