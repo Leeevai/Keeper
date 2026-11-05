@@ -341,3 +341,38 @@ enum Kind {
         flags: HashSet<String>,
     },
 }
+
+fn mangle_and_join(
+    settings: &Settings,
+    language: &Language,
+    punctuators: Vec<Letter>,
+    source: impl WordSource,
+    rng: &mut dyn Rng,
+) -> String {
+    let mut mangled = MangledWords {
+        inner: source,
+        language,
+        punctuators,
+        capitals: settings.capitals,
+        punctuation: settings.punctuators,
+    };
+    generate_fragment(settings, &mut mangled, settings.repeat_words, rng)
+}
+
+/// Removes characters which cannot be typed, optionally keeping letters only.
+fn clean_text(
+    text: &str,
+    language: &Language,
+    code_points: &CodePointSet,
+    letters_only: bool,
+    lowercase: bool,
+) -> String {
+    let filtered = filter_text(text, |cp| {
+        code_points.has(cp) && (!letters_only || language.includes(cp))
+    });
+    if lowercase {
+        language.lower_case(&filtered)
+    } else {
+        filtered
+    }
+}
