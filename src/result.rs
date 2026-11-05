@@ -235,3 +235,51 @@ impl ExpFilter {
         self.value
     }
 }
+
+/// The learning history of a key.
+#[derive(Debug, Clone)]
+pub struct KeyStats {
+    pub letter: Letter,
+    pub samples: Vec<KeySample>,
+    /// The current smoothed time to type in milliseconds.
+    pub time_to_type: Option<f64>,
+    /// The best smoothed time to type in milliseconds.
+    pub best_time_to_type: Option<f64>,
+    filter: ExpFilter,
+    index: usize,
+}
+
+impl KeyStats {
+    pub fn new(letter: Letter) -> Self {
+        Self {
+            letter,
+            samples: Vec::new(),
+            time_to_type: None,
+            best_time_to_type: None,
+            filter: ExpFilter::new(0.1),
+            index: 0,
+        }
+    }
+
+    pub fn append(&mut self, result: &TypingResult) {
+        if let Some(sample) = result.histogram.get(self.letter.cp)
+            && sample.time_to_type > 0
+        {
+            let filtered = self.filter.add(sample.time_to_type as f64);
+            self.samples.push(KeySample {
+                index: self.index,
+                time_stamp: result.time_stamp,
+                hit_count: sample.hit_count,
+                miss_count: sample.miss_count,
+                time_to_type: sample.time_to_type as f64,
+                filtered_time_to_type: filtered,
+            });
+            self.time_to_type = Some(filtered);
+            self.best_time_to_type = Some(
+                self.best_time_to_type
+                    .map_or(filtered, |best| best.min(filtered)),
+            );
+        }
+        self.index += 1;
+    }
+}
