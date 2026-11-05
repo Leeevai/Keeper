@@ -736,3 +736,40 @@ fn derivative(coefficients: &[f64]) -> Vec<f64> {
         .map(|(i, c)| c * i as f64)
         .collect()
 }
+
+/// Least squares fit of a polynomial, coefficients from the constant term up.
+pub fn polynomial_regression(xs: &[f64], ys: &[f64], degree: usize) -> Option<Vec<f64>> {
+    let size = degree + 1;
+    // The normal equations, augmented with the right hand side.
+    let mut a: Vec<Vec<f64>> = (0..size)
+        .map(|i| {
+            let mut row: Vec<f64> = (0..size)
+                .map(|j| xs.iter().map(|x| x.powi((i + j) as i32)).sum())
+                .collect();
+            row.push(xs.iter().zip(ys).map(|(x, y)| x.powi(i as i32) * y).sum());
+            row
+        })
+        .collect();
+    // Gaussian elimination with partial pivoting.
+    for col in 0..size {
+        let pivot = (col..size).max_by(|&p, &q| a[p][col].abs().total_cmp(&a[q][col].abs()))?;
+        if a[pivot][col].abs() < 1e-12 {
+            return None;
+        }
+        a.swap(col, pivot);
+        let (top, bottom) = a.split_at_mut(col + 1);
+        let pivot_row = &top[col];
+        for row in bottom.iter_mut() {
+            let f = row[col] / pivot_row[col];
+            for (v, p) in row.iter_mut().zip(pivot_row).skip(col) {
+                *v -= f * p;
+            }
+        }
+    }
+    let mut x = vec![0.0; size];
+    for row in (0..size).rev() {
+        let s: f64 = (row + 1..size).map(|k| a[row][k] * x[k]).sum();
+        x[row] = (a[row][size] - s) / a[row][row];
+    }
+    x.iter().all(|v| v.is_finite()).then_some(x)
+}
