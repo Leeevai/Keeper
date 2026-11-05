@@ -416,6 +416,56 @@ impl Keyboard {
     pub fn combo(&self, cp: u32) -> Option<&KeyCombo> {
         self.combos.get(cp)
     }
+
+    pub fn shape(&self, id: &str) -> Option<&KeyShape> {
+        self.shapes.iter().find(|s| s.id == id)
+    }
+
+    pub fn characters(&self, id: &str) -> &[Option<Character>] {
+        self.layout
+            .chars
+            .iter()
+            .find(|(k, _)| k == id)
+            .map(|(_, v)| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// All characters which can be typed on this keyboard.
+    pub fn code_points(&self) -> CodePointSet {
+        let mut set = CodePointSet::default();
+        for combo in &self.combos.list {
+            set.set.insert(combo.cp);
+            match self.shape(&combo.key).and_then(KeyShape::row) {
+                Some("home") => {
+                    set.weights.insert(combo.cp, 1);
+                }
+                Some("top") => {
+                    set.weights.insert(combo.cp, 2);
+                }
+                _ => {}
+            }
+        }
+        set
+    }
+
+    /// Translates a character typed on the `system` keyboard into the
+    /// character at the same key position on this keyboard.
+    pub fn emulate(&self, system: &Keyboard, cp: u32) -> u32 {
+        let Some(combo) = system.combo(cp) else {
+            return cp;
+        };
+        if combo.prefix.is_some() {
+            return cp;
+        }
+        let index = Modifier::ALL
+            .iter()
+            .position(|m| *m == combo.modifier)
+            .unwrap_or(0);
+        match self.characters(&combo.key).get(index) {
+            Some(Some(Character::CodePoint(target))) => *target,
+            _ => cp,
+        }
+    }
 }
 
 fn remap_zones(shapes: &mut [KeyShape], remap: &HashMap<KeyId, Vec<String>>) {
