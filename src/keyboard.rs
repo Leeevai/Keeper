@@ -227,3 +227,43 @@ impl Geometry {
             .unwrap_or(&Self::all()[0])
     }
 }
+
+/// Finger zone variants (`standard`, `symmetric`) with their display names.
+pub fn zone_mods() -> Vec<(&'static str, &'static str)> {
+    let mut v: Vec<_> = geometries_file()
+        .zone_mods
+        .iter()
+        .map(|(id, m)| (id.as_str(), m.name.as_str()))
+        .collect();
+    v.sort_by_key(|(id, _)| if *id == "standard" { 0 } else { 1 });
+    v
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Modifier {
+    None,
+    Shift,
+    Alt,
+    ShiftAlt,
+}
+
+impl Modifier {
+    pub fn shift(self) -> bool {
+        matches!(self, Modifier::Shift | Modifier::ShiftAlt)
+    }
+
+    pub fn alt(self) -> bool {
+        matches!(self, Modifier::Alt | Modifier::ShiftAlt)
+    }
+
+    fn complexity(self) -> u32 {
+        self.shift() as u32 + self.alt() as u32
+    }
+
+    const ALL: [Modifier; 4] = [
+        Modifier::None,
+        Modifier::Shift,
+        Modifier::Alt,
+        Modifier::ShiftAlt,
+    ];
+}
