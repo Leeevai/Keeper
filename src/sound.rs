@@ -226,4 +226,22 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(400));
         assert!(!sounds.failed, "no audio output");
     }
+
+    #[test]
+    fn silence_when_off() {
+        let mut sounds = Sounds::default();
+        sounds.play(
+            PlaySounds::None,
+            SoundTheme::Default,
+            0.5,
+            Feedback::Succeeded,
+        );
+        sounds.play(
+            PlaySounds::All,
+            SoundTheme::Default,
+            0.0,
+            Feedback::Succeeded,
+        );
+        assert!(!sounds.failed);
+    }
 }
