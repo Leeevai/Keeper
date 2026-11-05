@@ -572,3 +572,67 @@ fn key_speed_histogram(
         buf,
     );
 }
+
+fn key_frequency(s: &Styles, stats: &KeyStatsMap, area: Rect, buf: &mut Buffer) {
+    let usage = key_usage(stats);
+    if usage.iter().all(|u| u.hits == 0) {
+        Paragraph::new(Span::styled("No keys typed yet.", s.name)).render(area, buf);
+        return;
+    }
+    let (bar_width, gap) = bar_layout(usage.len(), area.width);
+    let [top, bottom, legend] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Fill(1),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    let hits: Vec<Bar> = usage
+        .iter()
+        .map(|u| {
+            Bar::default()
+                .value(u.hits as u64)
+                .text_value(String::new())
+                .label(Line::from(u.letter.label.clone()))
+                .style(Style::new().fg(s.color(s.palette.chart_hits)))
+        })
+        .collect();
+    BarChart::default()
+        .data(BarGroup::default().bars(&hits))
+        .bar_width(bar_width)
+        .bar_gap(gap)
+        .label_style(s.value)
+        .style(s.base)
+        .render(top, buf);
+    let ratios: Vec<Bar> = usage
+        .iter()
+        .map(|u| {
+            let ratio = u.ratio.unwrap_or(0.0) * 100.0;
+            Bar::default()
+                .value((ratio * 10.0).round() as u64)
+                .text_value(String::new())
+                .label(Line::from(u.letter.label.clone()))
+                .style(Style::new().fg(s.color(s.palette.chart_ratio)))
+        })
+        .collect();
+    BarChart::default()
+        .data(BarGroup::default().bars(&ratios))
+        .bar_width(bar_width)
+        .bar_gap(gap)
+        .label_style(s.value)
+        .style(s.base)
+        .render(bottom, buf);
+    let worst = usage
+        .iter()
+        .filter_map(|u| u.ratio.map(|r| (r, u)))
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(r, u)| format!("  Most missed: {} ({:.1}%).", u.letter.label, r * 100.0))
+        .unwrap_or_default();
+    Paragraph::new(Line::from(vec![
+        Span::styled("█", Style::new().fg(s.color(s.palette.chart_hits))),
+        Span::styled(" hit count   ", s.name),
+        Span::styled("█", Style::new().fg(s.color(s.palette.chart_ratio))),
+        Span::styled(" miss/hit ratio (relative miss frequency)", s.name),
+        Span::styled(worst, s.value),
+    ]))
+    .render(legend, buf);
+}
