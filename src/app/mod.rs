@@ -113,6 +113,79 @@ pub fn short_path(path: &std::path::Path) -> String {
     }
 }
 
+pub struct App {
+    pub storage: Storage,
+    pub settings: Settings,
+    pub results: Vec<TypingResult>,
+    pub screen: Screen,
+    pub practice: Practice,
+    pub typing_test: TypingTest,
+    /// Past typing test results.
+    pub tests: Vec<TestResult>,
+    pub profile: Profile,
+    pub settings_view: SettingsView,
+    pub styles: Styles,
+    pub sounds: Sounds,
+    pub help_scroll: u16,
+    pub quit: bool,
+    start: Instant,
+    /// Notifications with the time they expire at.
+    toasts: Vec<(String, f64)>,
+}
+
+impl App {
+    pub fn new(storage: Storage) -> Result<Self> {
+        let settings = storage.load_settings();
+        let results = storage.load_results()?;
+        let tests = storage.load_tests()?;
+        let practice = Practice::new(&settings, &results);
+        let typing_test = TypingTest::new(&settings);
+        let styles = Styles::new(Theme::get(&settings.theme), settings.color_mode);
+        Ok(Self {
+            storage,
+            settings,
+            results,
+            screen: Screen::Practice,
+            practice,
+            typing_test,
+            tests,
+            profile: Profile::default(),
+            settings_view: SettingsView::default(),
+            styles,
+            sounds: Sounds::default(),
+            help_scroll: 0,
+            quit: false,
+            start: Instant::now(),
+            toasts: Vec::new(),
+        })
+    }
+
+    pub fn now_ms(&self, at: Instant) -> f64 {
+        at.saturating_duration_since(self.start).as_secs_f64() * 1000.0
+    }
+
+    pub fn daily_goal(&self) -> DailyGoal {
+        DailyGoal::compute(
+            self.settings.daily_goal,
+            chrono::Local::now().date_naive(),
+            &self.results,
+        )
+    }
+
+    pub fn notify(&mut self, message: impl Into<String>, at: f64) {
+        self.toasts.push((message.into(), at + 6000.0));
+    }
+
+    /// The newest notification that has not expired.
+    pub fn toast(&self, now: f64) -> Option<&str> {
+        self.toasts
+            .iter()
+            .rev()
+            .find(|(_, until)| *until > now)
+            .map(|(m, _)| m.as_str())
+    }
+}
+
 /// Drops the last hints until the rest fits in the width.
 fn fit_hints(hints: &str, width: u16) -> String {
     let mut parts: Vec<&str> = hints.split(" · ").collect();
