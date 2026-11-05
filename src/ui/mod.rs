@@ -269,3 +269,47 @@ pub fn bar(value: f64, width: usize) -> (String, String) {
     let filled = ((value.clamp(0.0, 1.0) * width as f64).round() as usize).min(width);
     ("█".repeat(filled), "░".repeat(width - filled))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formatting() {
+        assert_eq!(format_duration(5_000), "5s");
+        assert_eq!(format_duration(200_000), "3m 20s");
+        assert_eq!(format_duration(3_900_000), "1h 05m");
+        assert_eq!(signed(1.0, "1".into()), "+1");
+        assert_eq!(signed(-1.0, "-1".into()), "-1");
+        assert_eq!(thousands(15999.4), "15,999");
+        assert_eq!(thousands(-1234567.0), "-1,234,567");
+        assert_eq!(thousands(12.0), "12");
+        assert_eq!(bar(0.5, 4), ("██".into(), "░░".into()));
+        assert_eq!(bar(2.0, 2), ("██".into(), "".into()));
+    }
+
+    #[test]
+    fn styles_for_every_theme() {
+        for theme in Theme::all() {
+            for mode in ColorMode::ALL {
+                let styles = Styles::new(theme, mode);
+                assert_eq!(styles.themed, theme.colors.is_some());
+                let _ = styles.confidence_rgb(0.5);
+            }
+        }
+        let s = Styles::new(Theme::get("dark"), ColorMode::Ansi256);
+        assert!(matches!(s.color(Rgb(255, 0, 0)), Color::Indexed(196)));
+        assert_eq!(contrast(Rgb(255, 255, 255)), Rgb(20, 20, 20));
+        assert_eq!(contrast(Rgb(0, 0, 0)), Rgb(245, 245, 245));
+    }
+
+    #[test]
+    fn centering() {
+        let r = centered(Rect::new(0, 0, 100, 40), 60, 10);
+        assert_eq!(r, Rect::new(20, 15, 60, 10));
+        assert_eq!(
+            centered(Rect::new(0, 0, 10, 5), 60, 10),
+            Rect::new(0, 0, 10, 5)
+        );
+    }
+}
