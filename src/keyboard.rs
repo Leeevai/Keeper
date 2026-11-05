@@ -184,3 +184,46 @@ impl KeyShape {
         self.select_zone(ROW_ZONES)
     }
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Geometry {
+    pub id: String,
+    pub name: String,
+    /// Either `staggered` or `matrix`.
+    pub form: String,
+    /// Ids of the finger zone variants this geometry supports.
+    pub zones: Vec<String>,
+    pub keys: Vec<KeyShape>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ZoneModData {
+    name: String,
+    zones: HashMap<KeyId, Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GeometriesFile {
+    geometries: Vec<Geometry>,
+    zone_mods: BTreeMap<String, ZoneModData>,
+    layout_mods: HashMap<String, HashMap<KeyId, Vec<String>>>,
+}
+
+fn geometries_file() -> &'static GeometriesFile {
+    static FILE: OnceLock<GeometriesFile> = OnceLock::new();
+    FILE.get_or_init(|| serde_json::from_str(assets::GEOMETRIES_JSON).expect("geometries.json"))
+}
+
+impl Geometry {
+    pub fn all() -> &'static [Geometry] {
+        &geometries_file().geometries
+    }
+
+    pub fn get(id: &str) -> &'static Geometry {
+        Self::all()
+            .iter()
+            .find(|g| g.id == id)
+            .unwrap_or(&Self::all()[0])
+    }
+}
