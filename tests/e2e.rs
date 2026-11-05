@@ -558,3 +558,57 @@ fn survives_resizing() {
     );
     assert!(term.quit());
 }
+
+fn keeper(home: &Path, args: &[&str]) -> (bool, String) {
+    let out = Command::new(BIN)
+        .args(args)
+        .env("KEEPER_HOME", home)
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr),
+    )
+}
+
+#[test]
+fn command_line() {
+    let home = tempfile::tempdir().unwrap();
+    let (ok, out) = keeper(home.path(), &["path"]);
+    assert!(
+        ok && out.trim() == home.path().display().to_string(),
+        "{out}"
+    );
+    let (ok, out) = keeper(home.path(), &["stats"]);
+    assert!(ok && out.contains("No lessons yet"), "{out}");
+    // A keybr.com export, with dates as strings.
+    let import = home.path().join("keybr.json");
+    std::fs::write(
+        &import,
+        r#"[{"layout":"en-us","textType":"generated","timeStamp":"2026-11-01T10:00:00.000Z","length":120,
+            "time":30000,"errors":2,"speed":240,"histogram":[
+            {"codePoint":97,"hitCount":20,"missCount":1,"timeToType":250},
+            {"codePoint":101,"hitCount":30,"missCount":0,"timeToType":220},
+            {"codePoint":110,"hitCount":15,"missCount":1,"timeToType":300}]}]"#,
+    )
+    .unwrap();
+    let (ok, out) = keeper(home.path(), &["import", import.to_str().unwrap()]);
+    assert!(ok && out.contains("Imported 1 new results"), "{out}");
+    let (ok, out) = keeper(home.path(), &["import", import.to_str().unwrap()]);
+    assert!(ok && out.contains("Imported 0 new results"), "{out}");
+    let (ok, out) = keeper(home.path(), &["stats"]);
+    assert!(
+        ok && out.contains("1 lessons") && out.contains("48.0wpm"),
+        "{out}"
+    );
+    let export = home.path().join("out.json");
+    let (ok, out) = keeper(home.path(), &["export", export.to_str().unwrap()]);
+    assert!(ok && out.contains("Exported 1 results"), "{out}");
+    let exported: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(export).unwrap()).unwrap();
+    assert_eq!(exported[0]["histogram"].as_array().unwrap().len(), 3);
+    let (ok, _) = keeper(home.path(), &["import", "/nonexistent"]);
+    assert!(!ok);
+    let (ok, out) = keeper(home.path(), &["--help"]);
+    assert!(ok && out.contains("typing tutor"), "{out}");
+}
