@@ -206,6 +206,52 @@ impl App {
         }
     }
 
+    pub fn handle_event(&mut self, event: Event, at: Instant) {
+        match event {
+            Event::Key(key) if key.kind != KeyEventKind::Release => self.handle_key(key, at),
+            Event::Paste(text) if self.screen == Screen::Settings => {
+                self.settings_view.handle_paste(&text)
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyEvent, at: Instant) {
+        let ctrl = is_ctrl(&key);
+        if ctrl && matches!(key.code, KeyCode::Char('c' | 'q')) {
+            self.quit = true;
+            return;
+        }
+        // The custom text editor takes every other key.
+        if self.screen == Screen::Settings && self.settings_view.editor.is_some() {
+            self.settings_key(key);
+            return;
+        }
+        match key.code {
+            KeyCode::Tab => {
+                self.screen = Screen::ALL[(self.screen.index() + 1) % Screen::ALL.len()];
+                return;
+            }
+            KeyCode::BackTab => {
+                let n = Screen::ALL.len();
+                self.screen = Screen::ALL[(self.screen.index() + n - 1) % n];
+                return;
+            }
+            KeyCode::F(n) if (1..=Screen::ALL.len() as u8).contains(&n) => {
+                self.screen = Screen::ALL[n as usize - 1];
+                return;
+            }
+            _ => {}
+        }
+        match self.screen {
+            Screen::Practice => self.practice_key(key, at),
+            Screen::TypingTest => self.typing_test_key(key, at),
+            Screen::Profile => self.profile_key(key, at),
+            Screen::Settings => self.settings_key(key),
+            Screen::Help => self.help_key(key),
+        }
+    }
+
     fn typing_test_key(&mut self, key: KeyEvent, at: Instant) {
         let ctrl = is_ctrl(&key);
         let now = self.now_ms(at);
@@ -257,6 +303,14 @@ impl App {
                 }
                 self.tests.push(result);
             }
+        }
+    }
+
+    fn settings_key(&mut self, key: KeyEvent) {
+        match self.settings_view.handle_key(key, &self.settings) {
+            SettingsAction::None => {}
+            SettingsAction::Back => self.screen = Screen::Practice,
+            SettingsAction::Apply(settings) => self.apply_settings(*settings),
         }
     }
 
@@ -346,6 +400,22 @@ impl App {
                 }
                 Err(e) => self.notify(format!("Reset failed: {e}"), now),
             },
+        }
+    }
+
+    fn help_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.screen = Screen::Practice,
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.help_scroll = self.help_scroll.saturating_add(1)
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.help_scroll = self.help_scroll.saturating_sub(1)
+            }
+            KeyCode::PageDown => self.help_scroll = self.help_scroll.saturating_add(10),
+            KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(10),
+            KeyCode::Home => self.help_scroll = 0,
+            _ => {}
         }
     }
 }
