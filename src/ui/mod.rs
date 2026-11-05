@@ -141,6 +141,54 @@ impl Styles {
     pub fn color(&self, rgb: Rgb) -> Color {
         to_color(self.depth, rgb)
     }
+
+    /// The color of a key with the given confidence, from slow to fast.
+    pub fn confidence_rgb(&self, confidence: f64) -> Rgb {
+        self.palette
+            .slow_key
+            .lerp(self.palette.fast_key, confidence.clamp(0.0, 1.0))
+    }
+
+    /// A style with the given background and a readable foreground.
+    pub fn on(&self, bg: Rgb) -> Style {
+        Style::new().bg(self.color(bg)).fg(self.color(contrast(bg)))
+    }
+
+    /// The color of a finger zone.
+    pub fn zone_rgb(&self, finger: &str) -> Option<Rgb> {
+        let index = match finger {
+            "pinky" => 0,
+            "ring" => 1,
+            "middle" => 2,
+            "leftIndex" => 3,
+            "rightIndex" => 4,
+            "thumb" => 5,
+            _ => return None,
+        };
+        Some(self.palette.zones[index])
+    }
+
+    pub fn syntax(&self, cls: Option<Class>) -> Style {
+        let p = &self.palette;
+        match cls {
+            Some(Class::Keyword) => Style::new().fg(self.color(p.syntax_keyword)),
+            Some(Class::String) => Style::new().fg(self.color(p.syntax_string)),
+            Some(Class::Number) => Style::new().fg(self.color(p.syntax_number)),
+            Some(Class::Comment) => Style::new().fg(self.color(p.syntax_comment)),
+            _ => self.text,
+        }
+    }
+
+    /// A value with its change: green when it grew, red when it fell.
+    pub fn delta(&self, value: f64) -> Style {
+        if value > 0.0 {
+            self.more
+        } else if value < 0.0 {
+            self.less
+        } else {
+            self.name
+        }
+    }
 }
 
 fn to_color(depth: ColorDepth, rgb: Rgb) -> Color {
