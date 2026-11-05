@@ -438,3 +438,67 @@ fn overview(s: &Styles, stats: &KeyStatsMap, target: &Target, area: Rect, buf: &
         buf,
     );
 }
+
+fn key_speed_chart(
+    s: &Styles,
+    unit: SpeedUnit,
+    target: &Target,
+    key: Option<&crate::result::KeyStats>,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let Some(key) = key.filter(|k| k.samples.len() >= 2) else {
+        Paragraph::new(Span::styled("Not enough data for this key yet.", s.name)).render(area, buf);
+        return;
+    };
+    let points: Vec<(f64, f64)> = key
+        .samples
+        .iter()
+        .map(|k| {
+            (
+                k.index as f64 + 1.0,
+                unit.measure(time_to_speed(k.filtered_time_to_type)),
+            )
+        })
+        .collect();
+    let first = points[0].0;
+    let last = points[points.len() - 1].0;
+    let goal = unit.measure(target.target_speed);
+    let target_points = vec![(first, goal), (last, goal)];
+    let max = points.iter().map(|p| p.1).fold(goal, f64::max) * 1.1;
+    let min = points.iter().map(|p| p.1).fold(goal, f64::min) * 0.9;
+    let fmt = |v: f64| format!("{v:.0}{}", unit.id());
+    Chart::new(vec![
+        Dataset::default()
+            .name(format!("{} speed", key.letter.label))
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::new().fg(s.color(s.palette.chart_speed)))
+            .data(&points),
+        Dataset::default()
+            .name("target")
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::new().fg(s.color(s.palette.chart_threshold)))
+            .data(&target_points),
+    ])
+    .x_axis(
+        Axis::default()
+            .bounds([first, last])
+            .labels(vec![
+                Line::from(format!("{first}")),
+                Line::from(format!("{last}")),
+            ])
+            .style(s.name),
+    )
+    .y_axis(
+        Axis::default()
+            .bounds([min, max])
+            .labels(axis_labels(min, max, &fmt))
+            .style(s.name),
+    )
+    .legend_position(Some(ratatui::widgets::LegendPosition::TopLeft))
+    .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 1)))
+    .style(s.base)
+    .render(area, buf);
+}
