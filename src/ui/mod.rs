@@ -238,3 +238,34 @@ pub fn thousands(value: f64) -> String {
     }
     if n < 0 { format!("-{out}") } else { out }
 }
+
+/// Formats a duration in milliseconds, e.g. `1h 05m` or `3m 20s`.
+pub fn format_duration(ms: u64) -> String {
+    let s = ms / 1000;
+    let (h, m, s) = (s / 3600, s / 60 % 60, s % 60);
+    if h > 0 {
+        format!("{h}h {m:02}m")
+    } else if m > 0 {
+        format!("{m}m {s:02}s")
+    } else {
+        format!("{s}s")
+    }
+}
+
+/// A rectangle of at most the given size, centered in the area.
+pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
+    let w = width.min(area.width);
+    let h = height.min(area.height);
+    Rect {
+        x: area.x + (area.width - w) / 2,
+        y: area.y + (area.height - h) / 2,
+        width: w,
+        height: h,
+    }
+}
+
+/// A horizontal bar of the given width filled to `value` (0 to 1).
+pub fn bar(value: f64, width: usize) -> (String, String) {
+    let filled = ((value.clamp(0.0, 1.0) * width as f64).round() as usize).min(width);
+    ("█".repeat(filled), "░".repeat(width - filled))
+}
