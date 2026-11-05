@@ -531,6 +531,75 @@ impl Field {
             }
         }
     }
+
+    /// keybr's explanation of the option.
+    pub fn help(self, s: &Settings) -> String {
+        use Field::*;
+        match self {
+            LessonType => match s.lesson_type {
+                crate::settings::LessonType::Guided => "Generate typing lessons with random words using the phonetic rules of your language. The key set is expanded dynamically based on your performance. This mode is for the beginners.",
+                crate::settings::LessonType::Wordlist => "Generate typing lessons from the list of the most common words of your language. All keys are included by default. This mode is for the pros.",
+                crate::settings::LessonType::Books => "Generate typing lessons from the text of a book. All keys are included by default. This mode is for the pros.",
+                crate::settings::LessonType::Custom => "Generate typing lessons from the words of your own custom text. All keys are included by default. This mode is for the pros.",
+                crate::settings::LessonType::Code => "Generate lessons that resemble the specified programming language syntax.",
+                crate::settings::LessonType::Numbers => "Practice numbers only.",
+            }
+            .into(),
+            NaturalWords => "Use the dictionary words as much as possible, and if not many such words are available, then use computer-generated pseudo-words. Natural words might be easier to type. Pseudo-words offer a much greater variety of letter combinations.".into(),
+            KeyboardOrder => "Sort letters so that the letters from the home row come first, then the letters from the top row, and finally all the remaining letters. This feature works best with optimized layouts, like Dvorak or Colemak.".into(),
+            AlphabetSize => "Manually unlock the remaining letters. Use this option if you want a greater variety of words. We recommend using it sparingly and letting the algorithm unlock letters for you.".into(),
+            RecoverKeys => "When you focus on a new key, the speed of previous keys is likely to decrease. By default you unlock a new key by raising only the focused key above the target speed. Otherwise you have to raise the focused key and all the previous keys above the target speed, which makes forgetting old keys harder.".into(),
+            WordListSize | TestWordListSize => "The number of the most common words to choose from. Fewer words are easier to remember.".into(),
+            LongWordsOnly => "Skip words of three letters or less.".into(),
+            Book | TestBook => "The book to take the text from.".into(),
+            ParagraphIndex => {
+                let p = crate::content::Book::get(&s.book).paragraphs();
+                let text: String = p.get(s.paragraph_index as usize).map(|t| t.chars().take(160).collect()).unwrap_or_default();
+                format!("Paragraph {} of {}: {}", s.paragraph_index + 1, p.len(), text)
+            }
+            TestParagraph => {
+                let p = crate::content::Book::get(&s.test_book).paragraphs();
+                let text: String = p.get(s.test_paragraph_index as usize).map(|t| t.chars().take(160).collect()).unwrap_or_default();
+                format!("Paragraph {} of {}: {}", s.test_paragraph_index + 1, p.len(), text)
+            }
+            BookLettersOnly | CustomLettersOnly => "Remove punctuation characters, digits and other symbols, keeping only the letters of the language.".into(),
+            BookLowercase | CustomLowercase => "Transform all letters to lowercase.".into(),
+            CustomText => "Type or paste your own text. Press Enter to open the editor, then Ctrl+S to save it or Esc to cancel.".into(),
+            CustomRandomize => "Put the words of the custom text in a random order.".into(),
+            CodeSyntax => "The programming language syntax to imitate.".into(),
+            CodeFlag(i) => format!("Practice the {} of the programming language syntax.", FLAGS[i]),
+            Benford => "Benford's law is an observation that in many real-life numerical data sets the leading digit is likely to be small.".into(),
+            Capitals => "Adjust the amount of capital letters added to the lesson text. We recommend increasing this value only when all letters are above the target speed.".into(),
+            Punctuators => "Adjust the amount of basic punctuation characters added to the lesson text. We recommend increasing this value only when all letters are above the target speed.".into(),
+            RepeatWords => "Repeat each word a number of times. Type a word for the first time to develop your muscle memory. Typing the same word consecutively should be easier.".into(),
+            LessonLength => "Adjust the number of words in the lesson text. Making lessons longer can improve your learning.".into(),
+            TargetSpeed => "The target speed is used to measure the confidence level and the color of a letter. In the guided mode a letter is only unlocked when you pass the target speed. When you unlock all letters, you can increase the target speed to go back to the learning mode with a higher threshold.".into(),
+            DailyGoal => "Set the time you want to spend on the exercises daily. It is a simple reminder which does not limit you in any way.".into(),
+            StopOnError => "If enabled, the cursor stops advancing until the right key is pressed. If disabled, all errors are accumulated in the text and must be cleared with the Backspace key.".into(),
+            ForgiveErrors => "If enabled, the text input forgives some kinds of errors by automatically fixing them, such as typing a wrong character or skipping a character.".into(),
+            SpaceSkipsWords => "If enabled, pressing the space key in the middle of a word skips the remaining characters of the word and moves the cursor to the beginning of the next word.".into(),
+            CaretShape => "The shape of the text cursor. The line cursor uses your terminal's own cursor.".into(),
+            Whitespace => "How spaces between words are displayed.".into(),
+            PlaySounds => "Play a click for every key press, a blip for every error, or both, with the recorded sounds of keybr.com.".into(),
+            SoundTheme => "The sounds of the keys: a soft click, mechanical keyboards or typewriters.".into(),
+            SoundVolume => "The loudness of the sounds.".into(),
+            Language => "The language to practice. Changing it selects the default layout of the language.".into(),
+            Layout => "The keyboard layout to practice, such as QWERTY, Dvorak or Colemak.".into(),
+            Geometry => "The physical shape of the keyboard.".into(),
+            Zones => "Show the color coding of the keyboard zones to learn which finger to use to press a key.".into(),
+            Emulation => "Emulation translates keys typed on your system layout into the practiced layout, so you can practice a layout without changing your system settings. Turn it off if your system already uses the practiced layout. Choose hardware emulation if your keyboard switches layouts itself.".into(),
+            SystemLayout => "The layout configured in your operating system, used to emulate the practiced layout.".into(),
+            KeyboardColors => "Show the color coding of the finger zones on the keyboard.".into(),
+            KeyboardPointers => "Highlight the key that must be pressed next. Use this option to quickly find a key if you don't know the keyboard layout well.".into(),
+            SpeedUnit => "For the purpose of typing measurement, each word is standardized to be five characters or keystrokes, including spaces and punctuation.".into(),
+            Theme => "The colors of the interface. The system theme uses the colors of your terminal.".into(),
+            ColorMode => "Keeper detects whether your terminal shows 24-bit colors. Choose 256 colors if the colors look wrong.".into(),
+            View => "The normal view shows the statistics and the keyboard, the compact view hides the keyboard, the bare view shows only the text. Ctrl+V switches views while practicing.".into(),
+            TestDuration => "How long the typing test lasts, by time or by number of characters.".into(),
+            TestSource => "Where the text of the typing test comes from.".into(),
+            TestLanguage => "The language of the typing test.".into(),
+        }
+    }
 }
 
 /// The number of lines a text takes when wrapped at word boundaries.
