@@ -189,3 +189,47 @@ impl TextView<'_> {
         cursor
     }
 }
+
+impl TextView<'_> {
+    /// Renders the text on a single line without wrapping. When the text
+    /// is wider than the area and `follow` is set, it scrolls so that the
+    /// cursor stays in view.
+    pub fn render_line(&self, area: Rect, buf: &mut Buffer, follow: bool) -> Option<Position> {
+        let area = area.intersection(buf.area);
+        if area.is_empty() {
+            return None;
+        }
+        let width = area.width as usize;
+        let widths: Vec<usize> = self.chars.iter().map(|c| char_width(c.cp)).collect();
+        let mut start = 0;
+        if follow && widths.iter().sum::<usize>() > width {
+            let cursor = self
+                .chars
+                .iter()
+                .position(|c| c.attr == Attr::Cursor)
+                .unwrap_or(self.chars.len());
+            // Keep a few characters of context after the cursor.
+            let margin = (width / 4).min(8);
+            let cursor_col: usize = widths[..cursor].iter().sum();
+            let mut dropped = 0;
+            while start < cursor && cursor_col - dropped + margin + 1 > width {
+                dropped += widths[start];
+                start += 1;
+            }
+        }
+        let mut cursor = None;
+        let mut x = area.x;
+        for (ch, w) in self.chars[start..].iter().zip(&widths[start..]) {
+            let w = *w as u16;
+            if x + w > area.x + area.width {
+                break;
+            }
+            if ch.attr == Attr::Cursor {
+                cursor = Some(Position::new(x, area.y));
+            }
+            buf.set_string(x, area.y, self.glyph(ch), self.style(ch));
+            x += w;
+        }
+        cursor
+    }
+}
