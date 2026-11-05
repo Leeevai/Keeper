@@ -708,6 +708,56 @@ fn generate_numbers(benford: bool, rng: &mut dyn Rng) -> String {
     words.join(" ")
 }
 
+/// Estimates how fast a key improves and how many lessons remain to reach
+/// the target speed, by fitting a polynomial to the recent samples.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearningRate {
+    /// The change of speed per lesson in characters per minute.
+    pub learning_rate: f64,
+    /// Lessons to reach the target speed, if known.
+    pub remaining_lessons: Option<u32>,
+    /// The coefficient of determination of the fit.
+    pub certainty: f64,
+}
+
+impl LearningRate {
+    pub fn from(samples: &[KeySample], target: &Target) -> Option<Self> {
+        let recent = &samples[samples.len().saturating_sub(30)..];
+        if recent.len() < 5 {
+            return None;
+        }
+        let session = find_session(recent);
+        let samples = if session.len() >= 5 { session } else { recent };
+        let xs: Vec<f64> = samples.iter().map(|s| s.index as f64 + 1.0).collect();
+        let ys: Vec<f64> = samples
+            .iter()
+            .map(|s| time_to_speed(s.filtered_time_to_type))
+            .collect();
+        let degree = if samples.len() > 20 {
+            3
+        } else if samples.len() > 10 {
+            2
+        } else {
+            1
+        };
+        let model = polynomial_regression(&xs, &ys, degree)?;
+        let certainty = r2(&xs, &ys, &model);
+        // Also rejects NaN, when all the samples are equal.
+        if certainty.is_nan() || certainty < 0.5 {
+            return None;
+        }
+        let last = samples[samples.len() - 1].index as f64 + 1.0;
+        let learning_rate = eval(&derivative(&model), last);
+        let remaining_lessons =
+            (1..=50).find(|i| eval(&model, last + *i as f64) >= target.target_speed);
+        Some(Self {
+            learning_rate,
+            remaining_lessons,
+            certainty,
+        })
+    }
+}
+
 /// The latest run of lessons without long breaks or slowdowns.
 fn find_session(samples: &[KeySample]) -> &[KeySample] {
     let n = samples.len();
@@ -772,4 +822,16 @@ pub fn polynomial_regression(xs: &[f64], ys: &[f64], degree: usize) -> Option<Ve
         x[row] = (a[row][size] - s) / a[row][row];
     }
     x.iter().all(|v| v.is_finite()).then_some(x)
+}
+
+/// The coefficient of determination.
+pub fn r2(xs: &[f64], ys: &[f64], model: &[f64]) -> f64 {
+    let mean = ys.iter().sum::<f64>() / ys.len() as f64;
+    let ss_res: f64 = xs
+        .iter()
+        .zip(ys)
+        .map(|(x, y)| (y - eval(model, *x)).powi(2))
+        .sum();
+    let ss_tot: f64 = ys.iter().map(|y| (y - mean).powi(2)).sum();
+    1.0 - ss_res / ss_tot
 }
