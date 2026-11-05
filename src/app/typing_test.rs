@@ -82,3 +82,50 @@ impl Source {
         }
     }
 }
+
+/// The serialized name of a setting value, e.g. `seconds15`.
+fn id_of<T: serde::Serialize>(value: T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
+}
+
+fn plain_chars(line: &str) -> Vec<Char> {
+    line.chars()
+        .map(|c| Char {
+            cp: u32::from(c),
+            attr: crate::textinput::Attr::Normal,
+            cls: None,
+        })
+        .collect()
+}
+
+/// A line of words of at most `NUM_COLS` characters, ending with a space.
+fn generate_line(source: &mut Source, rng: &mut Lcg) -> String {
+    let mut line = String::new();
+    let mut words = 0;
+    loop {
+        let state = (
+            rng.clone(),
+            match source {
+                Source::Book { index, .. } => *index,
+                _ => 0,
+            },
+        );
+        let word = source.next_word(rng);
+        // Measured in terminal columns: some scripts are two columns wide.
+        if words > 0 && line.width() + word.width() + 1 > NUM_COLS {
+            // Put the word back for the next line.
+            *rng = state.0;
+            if let Source::Book { index, .. } = source {
+                *index = state.1;
+            }
+            break;
+        }
+        line.push_str(&word);
+        line.push(' ');
+        words += 1;
+    }
+    line
+}
