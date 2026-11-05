@@ -559,3 +559,73 @@ fn speed_series(steps: &[Step]) -> Vec<f64> {
         .map(|n| n as f64 / (window / 1000.0) * 60.0)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn type_text(test: &mut TypingTest, n: usize, start: f64, gap: f64) -> f64 {
+        let mut now = start;
+        for _ in 0..n {
+            if test.report.is_some() {
+                break;
+            }
+            let next = test.input.remaining()[0];
+            now += gap;
+            test.handle(InputAction::Char(next), now);
+        }
+        now
+    }
+
+    #[test]
+    fn lines_fit_and_end_with_a_space() {
+        for source in TestSource::ALL {
+            let settings = Settings {
+                test_source: source,
+                ..Settings::default()
+            };
+            let test = TypingTest::with_rng(&settings, Lcg::new(1));
+            assert_eq!(test.lines.len(), NUM_LINES);
+            for line in &test.lines {
+                assert!(line.chars().count() <= NUM_COLS + 1, "{line}");
+                assert!(line.ends_with(' '));
+            }
+        }
+        // Book lines continue the text in order.
+        let book = Settings {
+            test_source: TestSource::Book,
+            ..Settings::default()
+        };
+        let test = TypingTest::with_rng(&book, Lcg::new(1));
+        let text: String = test.lines.concat();
+        let expected: Vec<&str> = Book::get("en-alice-wonderland").paragraphs()[0]
+            .split_whitespace()
+            .collect();
+        let typed: Vec<&str> = text.split_whitespace().take(expected.len()).collect();
+        assert_eq!(typed, expected[..typed.len()]);
+    }
+
+    #[test]
+    fn a_length_test_finishes_after_the_characters() {
+        let settings = Settings {
+            test_duration: TestDuration::Chars100,
+            ..Settings::default()
+        };
+        let mut test = TypingTest::with_rng(&settings, Lcg::new(2));
+        assert!(!test.started());
+        type_text(&mut test, 99, 0.0, 100.0);
+        assert!(test.report.is_none());
+        assert!(test.started());
+        type_text(&mut test, 5, 9_900.0, 100.0);
+        let report = test.report.as_ref().unwrap();
+        assert_eq!(report.result.length, 100);
+        assert!(
+            (report.result.speed - 100.0 / 9.9 * 60.0).abs() < 1.0,
+            "{}",
+            report.result.speed
+        );
+        assert_eq!(report.result.duration, "chars100");
+        assert_eq!(report.result.source, "commonWords");
+        assert!(!report.speeds.is_empty());
+    }
+}
