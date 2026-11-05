@@ -186,3 +186,54 @@ fn lines_of(path: &Path) -> usize {
         .map(|s| s.lines().count())
         .unwrap_or(0)
 }
+
+#[test]
+fn starts_on_the_practice_screen_and_quits_cleanly() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    let screen = term.screen();
+    assert!(screen.contains("F1 Practice"), "{screen}");
+    assert!(screen.contains("All keys:"), "{screen}");
+    assert!(screen.contains("E N I A R L"), "{screen}");
+    assert!(
+        screen.contains("Guided lessons · English · United States"),
+        "{screen}"
+    );
+    assert!(screen.contains(" Q   W   E   R   T   Y "), "{screen}");
+    assert!(term.parser.screen().alternate_screen());
+    assert!(term.quit(), "keeper did not exit successfully");
+    // The terminal is restored.
+    assert!(!term.parser.screen().alternate_screen());
+}
+
+#[test]
+fn typing_lessons_saves_results_and_updates_the_metrics() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    let lesson = term.box_text();
+    assert!(lesson.chars().all(|c| "eniarl ".contains(c)), "{lesson}");
+    term.type_text(&lesson, Duration::from_millis(55));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    assert!(term.screen().contains("100.0%"), "{}", term.screen());
+    assert_eq!(lines_of(&home.path().join("results.jsonl")), 1);
+    // A wrong key is an error: the cursor stops, the result is not perfect.
+    let lesson = term.box_text();
+    term.type_text("#", Duration::from_millis(60));
+    term.type_text(&lesson, Duration::from_millis(55));
+    assert!(term.wait_for("Accuracy:", Duration::from_secs(5)));
+    assert_eq!(lines_of(&home.path().join("results.jsonl")), 2);
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    let last: serde_json::Value = serde_json::from_str(results.lines().last().unwrap()).unwrap();
+    assert_eq!(last["errors"], 1);
+    assert_eq!(last["layout"], "en-us");
+    assert!(term.quit());
+
+    // The history is loaded again on the next start.
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(term.screen().contains("Speed:"), "{}", term.screen());
+    assert!(term.quit());
+}
