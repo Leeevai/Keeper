@@ -8,6 +8,7 @@ pub mod language;
 pub mod phonetic;
 pub mod result;
 pub mod rng;
+pub mod settings;
 pub mod textinput;
 pub mod theme;
 pub mod unicode;
