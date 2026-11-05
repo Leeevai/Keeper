@@ -265,3 +265,132 @@ fn histogram(
         buf,
     );
 }
+
+fn axis_labels(lo: f64, hi: f64, format: &dyn Fn(f64) -> String) -> Vec<Line<'static>> {
+    vec![
+        Line::from(format(lo)),
+        Line::from(format((lo + hi) / 2.0)),
+        Line::from(format(hi)),
+    ]
+}
+
+fn speed_charts(
+    s: &Styles,
+    unit: SpeedUnit,
+    settings: &Settings,
+    results: &[TypingResult],
+    smoothness: f64,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    if results.len() < 2 {
+        Paragraph::new(Span::styled(
+            "Complete a few lessons to see your progress over time.",
+            s.name,
+        ))
+        .render(area, buf);
+        return;
+    }
+    let n = results.len() as f64;
+    let xs: Vec<f64> = (1..=results.len()).map(|i| i as f64).collect();
+    let speed = smooth_series(results.iter().map(|r| unit.measure(r.speed)), smoothness);
+    let accuracy = smooth_series(results.iter().map(|r| r.accuracy * 100.0), smoothness);
+    let complexity = smooth_series(results.iter().map(|r| r.complexity as f64), smoothness);
+    let [a, b, c] = Layout::vertical([
+        Constraint::Fill(2),
+        Constraint::Fill(1),
+        Constraint::Fill(1),
+    ])
+    .areas(area);
+    let target = unit.measure(settings.target_speed as f64);
+    let x_axis = Axis::default()
+        .bounds([1.0, n])
+        .labels(vec![
+            Line::from("1"),
+            Line::from(format!("{}", (n / 2.0).round())),
+            Line::from(format!("{n}")),
+        ])
+        .style(s.name);
+
+    let points =
+        |ys: &[f64]| -> Vec<(f64, f64)> { xs.iter().copied().zip(ys.iter().copied()).collect() };
+    let speed_points = points(&speed);
+    let target_points = vec![(1.0, target), (n, target)];
+    let max_speed = speed.iter().cloned().fold(target, f64::max) * 1.1;
+    let min_speed = speed.iter().cloned().fold(target, f64::min) * 0.9;
+    let fmt = |v: f64| format!("{v:.0}{}", unit.id());
+    Chart::new(vec![
+        Dataset::default()
+            .name(format!("speed ({})", unit.id()))
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::new().fg(s.color(s.palette.chart_speed)))
+            .data(&speed_points),
+        Dataset::default()
+            .name("target")
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::new().fg(s.color(s.palette.chart_threshold)))
+            .data(&target_points),
+    ])
+    .x_axis(x_axis.clone())
+    .y_axis(
+        Axis::default()
+            .bounds([min_speed, max_speed])
+            .labels(axis_labels(min_speed, max_speed, &fmt))
+            .style(s.name),
+    )
+    .legend_position(Some(ratatui::widgets::LegendPosition::TopLeft))
+    .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 1)))
+    .style(s.base)
+    .render(a, buf);
+
+    let acc_points = points(&accuracy);
+    let min_acc = accuracy
+        .iter()
+        .cloned()
+        .fold(100.0, f64::min)
+        .floor()
+        .min(95.0);
+    Chart::new(vec![
+        Dataset::default()
+            .name("accuracy (%)")
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::new().fg(s.color(s.palette.chart_accuracy)))
+            .data(&acc_points),
+    ])
+    .x_axis(x_axis.clone())
+    .y_axis(
+        Axis::default()
+            .bounds([min_acc, 100.0])
+            .labels(axis_labels(min_acc, 100.0, &|v| format!("{v:.0}%")))
+            .style(s.name),
+    )
+    .legend_position(Some(ratatui::widgets::LegendPosition::TopLeft))
+    .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 1)))
+    .style(s.base)
+    .render(b, buf);
+
+    let keys_points = points(&complexity);
+    let max_keys = complexity.iter().cloned().fold(1.0, f64::max).ceil() + 1.0;
+    Chart::new(vec![
+        Dataset::default()
+            .name("keys in the lesson")
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .style(Style::new().fg(s.color(s.palette.chart_complexity)))
+            .data(&keys_points),
+    ])
+    .x_axis(x_axis)
+    .y_axis(
+        Axis::default()
+            .bounds([0.0, max_keys])
+            .labels(axis_labels(0.0, max_keys, &|v| format!("{v:.0}")))
+            .style(s.name),
+    )
+    .legend_position(Some(ratatui::widgets::LegendPosition::TopLeft))
+    .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 1)))
+    .style(s.base)
+    .render(c, buf);
+}
