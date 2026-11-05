@@ -114,3 +114,29 @@ fn fit_hints(hints: &str, width: u16) -> String {
     }
     parts.join(" · ")
 }
+
+/// Whether the lessons must be regenerated after a settings change.
+fn lesson_changed(a: &Settings, b: &Settings) -> bool {
+    let strip = |s: &Settings| Settings {
+        theme: String::new(),
+        color_mode: Default::default(),
+        speed_unit: Default::default(),
+        view: Default::default(),
+        caret_shape: Default::default(),
+        whitespace_style: Default::default(),
+        play_sounds: Default::default(),
+        sound_volume: 0.0,
+        sound_theme: Default::default(),
+        keyboard_colors: true,
+        keyboard_pointers: true,
+        daily_goal: 0,
+        test_source: Default::default(),
+        test_language: String::new(),
+        test_word_list_size: 0,
+        test_book: String::new(),
+        test_paragraph_index: 0,
+        test_duration: Default::default(),
+        ..s.clone()
+    };
+    strip(a) != strip(b)
+}
