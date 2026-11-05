@@ -945,4 +945,59 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn lesson_length_capitals_punctuation_and_repeats() {
+        let mut lesson = Lesson::new(&settings(|s| {
+            s.lesson_length = 1.0;
+            s.capitals = 1.0;
+            s.punctuators = 1.0;
+            s.repeat_words = 2;
+            s.alphabet_size = 1.0;
+        }));
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        let mut rng = Lcg::new(4);
+        let text = flatten(&lesson.generate(&keys, &mut rng));
+        let words: Vec<&str> = text.split(' ').collect();
+        let letters: usize = words.iter().map(|w| w.chars().count()).sum();
+        assert!(letters >= 200, "{text}");
+        assert!(
+            words.iter().all(|w| w
+                .chars()
+                .find(|c| c.is_alphabetic())
+                .unwrap()
+                .is_uppercase()),
+            "{text}"
+        );
+        assert!(
+            words
+                .iter()
+                .all(|w| w.chars().any(|c| c.is_ascii_punctuation())),
+            "{text}"
+        );
+        assert_eq!(words[0], words[1]);
+    }
+
+    #[test]
+    fn word_list_lessons() {
+        let mut lesson = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Wordlist;
+            s.word_list_size = 10;
+        }));
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        assert_eq!(keys.included().count(), lesson.letters().len());
+        assert!(keys.focused().is_none());
+        let top: Vec<String> = word_list("en")[..10].to_vec();
+        let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+        assert!(
+            text.split(' ').all(|w| top.contains(&w.to_string())),
+            "{text}"
+        );
+        let mut long = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Wordlist;
+            s.long_words_only = true;
+        }));
+        let text = flatten(&long.generate(&keys, &mut Lcg::new(1)));
+        assert!(text.split(' ').all(|w| w.chars().count() > 3), "{text}");
+    }
 }
