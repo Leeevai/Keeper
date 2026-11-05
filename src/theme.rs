@@ -277,3 +277,39 @@ impl Theme {
         Self::find(id).unwrap_or(&Self::all()[0])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_math_matches_less() {
+        // Expected values computed independently with Python's colorsys.
+        assert_eq!(Rgb::hex(0xf4f0f0).darken(5.0), Rgb::hex(0xe9e1e1));
+        assert_eq!(Rgb::hex(0x282640).lighten(20.0), Rgb::hex(0x504c80));
+        assert_eq!(
+            Rgb::hex(0xf4f0f0).mix(Rgb::hex(0x282640), 40.0),
+            Rgb::hex(0x7a7786)
+        );
+        assert_eq!(
+            Rgb::hex(0x000000).lerp(Rgb::hex(0xffffff), 0.5),
+            Rgb(128, 128, 128)
+        );
+    }
+
+    #[test]
+    fn ansi256_approximation() {
+        assert_eq!(Rgb(0, 0, 0).to_ansi256(), 16);
+        assert_eq!(Rgb(255, 255, 255).to_ansi256(), 231);
+        assert_eq!(Rgb(255, 0, 0).to_ansi256(), 196);
+        assert_eq!(Rgb(128, 128, 128).to_ansi256(), 244);
+    }
+
+    #[test]
+    fn themes() {
+        assert_eq!(Theme::all().len(), 9);
+        assert!(Theme::get("system").colors.is_none());
+        assert!(Theme::get("dark").colors.is_some());
+        assert_eq!(Theme::get("nope").id, "system");
+    }
+}
