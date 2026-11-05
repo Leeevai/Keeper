@@ -502,3 +502,73 @@ fn key_speed_chart(
     .style(s.base)
     .render(area, buf);
 }
+
+/// The bar width and gap which fit `count` bars in the width.
+fn bar_layout(count: usize, width: u16) -> (u16, u16) {
+    let per = (width as usize / count.max(1)).clamp(1, 6) as u16;
+    if per >= 2 { (per - 1, 1) } else { (1, 0) }
+}
+
+fn key_speed_histogram(
+    s: &Styles,
+    unit: SpeedUnit,
+    target: &Target,
+    stats: &KeyStatsMap,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let keys: Vec<_> = stats.iter().collect();
+    if keys.iter().all(|k| k.time_to_type.is_none()) {
+        Paragraph::new(Span::styled("No key speeds measured yet.", s.name)).render(area, buf);
+        return;
+    }
+    let (bar_width, gap) = bar_layout(keys.len(), area.width);
+    let bars: Vec<Bar> = keys
+        .iter()
+        .map(|k| {
+            let speed = k
+                .time_to_type
+                .map_or(0.0, |t| unit.measure(time_to_speed(t)));
+            let confidence = target.confidence(k.time_to_type).unwrap_or(0.0);
+            let color = s.color(s.confidence_rgb(confidence));
+            Bar::default()
+                .value((speed * 10.0).round() as u64)
+                .text_value(if bar_width >= 3 {
+                    format!("{speed:.0}")
+                } else {
+                    String::new()
+                })
+                .label(Line::from(k.letter.label.clone()))
+                .style(Style::new().fg(color))
+                .value_style(s.on(s.confidence_rgb(confidence)))
+        })
+        .collect();
+    BarChart::default()
+        .data(BarGroup::default().bars(&bars))
+        .bar_width(bar_width)
+        .bar_gap(gap)
+        .label_style(s.value)
+        .style(s.base)
+        .render(
+            Rect {
+                height: area.height - 1,
+                ..area
+            },
+            buf,
+        );
+    let line = Line::from(Span::styled(
+        format!(
+            "Bars: the current speed of every key in {}, colored from slow to the target speed.",
+            unit.id()
+        ),
+        s.name,
+    ));
+    Paragraph::new(line).render(
+        Rect {
+            y: area.y + area.height - 1,
+            height: 1,
+            ..area
+        },
+        buf,
+    );
+}
