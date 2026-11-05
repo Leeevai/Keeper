@@ -5,4 +5,5 @@ pub mod keyboard;
 pub mod language;
 pub mod phonetic;
 pub mod rng;
+pub mod textinput;
 pub mod unicode;
