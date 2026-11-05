@@ -82,25 +82,41 @@ impl Term {
         }
     }
 
+    /// Feeds the output of the program into the emulator until it pauses.
+    /// A frame reaches the terminal in many writes, so reading the screen
+    /// before the program goes quiet can find a frame drawn only halfway.
+    fn settle(&mut self) {
+        let end = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < end {
+            match self.rx.recv_timeout(Duration::from_millis(150)) {
+                Ok(bytes) => self.parser.process(&bytes),
+                Err(_) => break,
+            }
+        }
+    }
+
     fn screen(&self) -> String {
         self.parser.screen().contents()
     }
 
+    /// Waits for the text to appear, then for the rest of its frame.
     fn wait_for(&mut self, text: &str, timeout: Duration) -> bool {
         let end = Instant::now() + timeout;
-        while Instant::now() < end {
-            if self.screen().contains(text) {
-                return true;
+        while !self.screen().contains(text) {
+            if Instant::now() >= end {
+                return false;
             }
             self.pump(Duration::from_millis(50));
         }
-        self.screen().contains(text)
+        self.settle();
+        true
     }
 
+    /// Sends keys and waits for the program to finish redrawing.
     fn send(&mut self, bytes: &[u8]) {
         self.writer.write_all(bytes).unwrap();
         self.writer.flush().unwrap();
-        self.pump(Duration::from_millis(60));
+        self.settle();
     }
 
     /// Types every character with a pause, like a person would.
