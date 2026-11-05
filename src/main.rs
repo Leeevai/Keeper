@@ -94,6 +94,71 @@ fn print_stats(storage: &Storage) -> Result<()> {
     Ok(())
 }
 
+fn run(storage: Storage) -> Result<()> {
+    let mut app = App::new(storage)?;
+    let mut terminal = ratatui::try_init().context("cannot initialize the terminal")?;
+    let _ = execute!(stdout(), EnableBracketedPaste);
+    let result = event_loop(&mut terminal, &mut app);
+    let _ = execute!(
+        stdout(),
+        DisableBracketedPaste,
+        SetCursorStyle::DefaultUserShape
+    );
+    ratatui::restore();
+    result
+}
+
+fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
+    // Key presses are timestamped as soon as they arrive, on their own
+    // thread, so that drawing never delays the measured typing speed.
+    let (tx, rx) = mpsc::channel::<(Event, Instant)>();
+    thread::spawn(move || {
+        while let Ok(event) = event::read() {
+            if tx.send((event, Instant::now())).is_err() {
+                break;
+            }
+        }
+    });
+    let mut bar_cursor = false;
+    let mut dirty = true;
+    loop {
+        if dirty {
+            let now = Instant::now();
+            terminal.draw(|frame| app.render(frame, now))?;
+            dirty = false;
+        }
+        let wants_bar = app.wants_bar_cursor();
+        if wants_bar != bar_cursor {
+            let style = if wants_bar {
+                SetCursorStyle::SteadyBar
+            } else {
+                SetCursorStyle::DefaultUserShape
+            };
+            execute!(stdout(), style)?;
+            bar_cursor = wants_bar;
+        }
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok((event, at)) => {
+                app.handle_event(event, at);
+                // Handle everything that is already waiting before drawing again.
+                while let Ok((event, at)) = rx.try_recv() {
+                    app.handle_event(event, at);
+                }
+                dirty = true;
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+        let now = Instant::now();
+        // Redraw without input only while something moves on the screen.
+        dirty |= app.tick(now) | app.animating(now);
+        if app.quit {
+            break;
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     println!("keeper {}", env!("CARGO_PKG_VERSION"));
 }
