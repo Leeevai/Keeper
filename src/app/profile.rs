@@ -1196,3 +1196,77 @@ pub fn current_streak(days: &std::collections::BTreeMap<NaiveDate, u64>, today: 
     }
     n
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::ColorMode;
+    use crate::theme::Theme;
+    use std::collections::BTreeMap;
+
+    fn page_text(profile: &Profile, results: &[TypingResult], width: u16) -> String {
+        let styles = Styles::new(Theme::get("dark"), ColorMode::Truecolor);
+        let settings = Settings::default();
+        let ctx = RenderContext {
+            styles: &styles,
+            settings: &settings,
+            daily_goal: crate::result::DailyGoal {
+                goal: 30,
+                value: 0.5,
+            },
+            toast: None,
+            now: 0.0,
+            focused: true,
+            data_dir: std::path::PathBuf::from("/data"),
+        };
+        let buf = profile.page(width, &ctx, results);
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Forty lessons over the last ten days, getting faster.
+    fn history() -> Vec<TypingResult> {
+        let day = 86_400_000;
+        let now = chrono::Utc::now().timestamp_millis();
+        (0..40i64)
+            .map(|i| {
+                let samples: Vec<(char, u32)> =
+                    "eniarlt".chars().map(|c| (c, 300 - i as u32 * 3)).collect();
+                let accuracy = if i % 7 == 0 { 0.9 } else { 1.0 };
+                let ts = now - (40 - i) * day / 4;
+                crate::result::tests::result(ts, 150.0 + i as f64 * 5.0, accuracy, &samples)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn renders_every_section() {
+        let text = page_text(&Profile::default(), &history(), 110);
+        for title in [
+            "All Time Statistics",
+            "Statistics for Today",
+            "Accuracy Streaks",
+            "Relative Typing Speed",
+            "Relative Accuracy",
+            "Typing Speed",
+            "Learning Progress Overview",
+            "Key Typing Speed: E",
+            "Key Typing Speed Histogram",
+            "Key Frequency Histogram",
+            "Hit count",
+            "Miss count",
+            "Practice Calendar",
+            "beats",
+            "/data",
+        ] {
+            assert!(text.contains(title), "{title} missing from\n{text}");
+        }
+        assert!(text.contains("Lessons           40"), "{text}");
+    }
+}
