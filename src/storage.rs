@@ -112,6 +112,53 @@ impl Storage {
         fs::rename(&path, &backup)?;
         Ok(Some(backup))
     }
+
+    /// Writes all results as a JSON array, the format keybr.com uses for
+    /// downloaded data.
+    pub fn export_results(&self, results: &[TypingResult], path: &Path) -> Result<()> {
+        let records: Vec<ResultRecord> = results.iter().map(TypingResult::to_record).collect();
+        write_atomic(path, serde_json::to_string_pretty(&records)?.as_bytes())
+    }
+
+    /// Adds results from a JSON array (such as data downloaded from
+    /// keybr.com) or a JSON lines file. Returns the number of new results.
+    pub fn import_results(
+        &self,
+        existing: &[TypingResult],
+        path: &Path,
+    ) -> Result<Vec<TypingResult>> {
+        let text =
+            fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
+        let records: Vec<ResultRecord> = match serde_json::from_str::<Vec<ResultRecord>>(&text) {
+            Ok(records) => records,
+            Err(_) => text
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(serde_json::from_str)
+                .collect::<Result<_, _>>()
+                .context("the file is neither a JSON array of results nor JSON lines")?,
+        };
+        let known: std::collections::HashSet<i64> = existing.iter().map(|r| r.time_stamp).collect();
+        let mut added: Vec<TypingResult> = records
+            .into_iter()
+            .filter_map(|r| r.into_result().recover())
+            .filter(|r| !known.contains(&r.time_stamp))
+            .collect();
+        added.sort_by_key(|r| r.time_stamp);
+        added.dedup_by_key(|r| r.time_stamp);
+        for result in &added {
+            self.append_result(result)?;
+        }
+        Ok(added)
+    }
+
+    pub fn load_tests(&self) -> Result<Vec<TestResult>> {
+        read_lines(&self.tests_path())
+    }
+
+    pub fn append_test(&self, result: &TestResult) -> Result<()> {
+        append_line(&self.tests_path(), result)
+    }
 }
 
 fn read_lines<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
