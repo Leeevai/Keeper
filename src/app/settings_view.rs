@@ -848,6 +848,211 @@ impl SettingsView {
         text
     }
 
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        ctx: &RenderContext,
+        results: &[TypingResult],
+    ) {
+        let s = ctx.styles;
+        let settings = ctx.settings;
+        let list = fields(settings);
+        let selected = self.selected.min(list.len() - 1);
+        let (section, field) = list[selected];
+
+        let wide = area.width >= 110;
+        let [left, right] = if wide {
+            Layout::horizontal([Constraint::Length(64), Constraint::Fill(1)]).areas(area)
+        } else {
+            // The list keeps two thirds of the height.
+            let panel = (area.height / 3).clamp(6, 16);
+            Layout::vertical([Constraint::Fill(1), Constraint::Length(panel)]).areas(area)
+        };
+
+        // The list of options, scrolled to keep the selection visible.
+        let mut lines: Vec<Line> = Vec::new();
+        let mut selected_line = 0;
+        let mut last_section = None;
+        for (i, (sec, f)) in list.iter().enumerate() {
+            if last_section != Some(*sec) {
+                if last_section.is_some() {
+                    lines.push(Line::from(""));
+                }
+                lines.push(Line::from(Span::styled(sec.title(), s.title)));
+                last_section = Some(*sec);
+            }
+            let value = f.value(settings);
+            let is_selected = i == selected;
+            if is_selected {
+                selected_line = lines.len();
+            }
+            let marker = if is_selected { "› " } else { "  " };
+            let style = if is_selected { s.selected } else { s.text };
+            let value_style = if is_selected {
+                s.selected.add_modifier(Modifier::BOLD)
+            } else {
+                s.value
+            };
+            let arrows = if is_selected && *f != Field::CustomText {
+                ("‹ ", " ›")
+            } else {
+                ("  ", "  ")
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("{marker}{:<28}", f.label()), style),
+                Span::styled(arrows.0, s.accent),
+                Span::styled(value, value_style),
+                Span::styled(arrows.1, s.accent),
+            ]));
+        }
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(s.border)
+            .title(Span::styled(" Settings ", s.title));
+        let inner_height = left.height.saturating_sub(2) as usize;
+        let scroll = selected_line
+            .saturating_sub(inner_height.saturating_sub(4))
+            .min(lines.len().saturating_sub(inner_height));
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(block)
+                .scroll((scroll as u16, 0)),
+            left,
+        );
+
+        // The explanation and a preview.
+        let help = Paragraph::new(vec![
+            Line::from(Span::styled(field.label(), s.value)),
+            Line::from(Span::styled(field.help(settings), s.name)),
+        ])
+        .wrap(Wrap { trim: true });
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(s.border)
+            .title(Span::styled(format!(" {} ", section.title()), s.title));
+        let inner = block.inner(right);
+        frame.render_widget(block, right);
+        let inner = Rect {
+            x: inner.x + 1,
+            width: inner.width.saturating_sub(2),
+            ..inner
+        };
+        let help_height =
+            (1 + wrapped_height(&field.help(settings), inner.width as usize)).min(inner.height / 2);
+        let [help_area, _, preview_area] = Layout::vertical([
+            Constraint::Length(help_height),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .areas(inner);
+        frame.render_widget(help, help_area);
+        match section {
+            Section::Lessons => {
+                let text = self.lesson_preview(settings, results);
+                frame.render_widget(
+                    Paragraph::new(vec![
+                        Line::from(Span::styled("Lesson preview", s.title)),
+                        Line::from(Span::styled(text, s.text)),
+                    ])
+                    .wrap(Wrap { trim: true }),
+                    preview_area,
+                );
+            }
+            Section::Keyboard | Section::Miscellaneous => {
+                let o = settings.keyboard_options();
+                let keyboard = Keyboard::new(o.layout, &o.geometry.id, &o.zones);
+                let mut view = KeyboardView::new(&keyboard, s);
+                view.zone_colors = settings.keyboard_colors;
+                if settings.keyboard_pointers {
+                    view.pointers = KeyboardView::pointers_for(&keyboard, u32::from('a'));
+                }
+                frame.render_widget(
+                    Paragraph::new(Span::styled("Preview", s.title)),
+                    preview_area,
+                );
+                let area = Rect {
+                    y: preview_area.y + 1,
+                    height: preview_area.height.saturating_sub(1),
+                    ..preview_area
+                };
+                frame.render_widget(view, area);
+            }
+            Section::Typing => {
+                let sample = "the quick brown fox jumps over the lazy dog";
+                let chars: Vec<Char> = sample
+                    .chars()
+                    .enumerate()
+                    .map(|(i, c)| Char {
+                        cp: u32::from(c),
+                        attr: match i {
+                            0..10 if i != 6 => Attr::Hit,
+                            6 => Attr::Miss,
+                            10 => Attr::Cursor,
+                            _ => Attr::Normal,
+                        },
+                        cls: None,
+                    })
+                    .collect();
+                let view = TextView {
+                    chars: &chars,
+                    styles: s,
+                    whitespace: settings.whitespace_style,
+                    caret: settings.caret_shape,
+                    rtl: false,
+                    typo: false,
+                };
+                frame.render_widget(
+                    Paragraph::new(Span::styled("Preview", s.title)),
+                    preview_area,
+                );
+                let row = Rect {
+                    y: preview_area.y + 2,
+                    height: 1,
+                    ..preview_area
+                };
+                if let Some(pos) = view.render(row, frame.buffer_mut())
+                    && settings.caret_shape == CaretShape::Line
+                    && self.editor.is_none()
+                {
+                    frame.set_cursor_position(pos);
+                }
+            }
+            Section::TypingTest => {}
+        }
+
+        if let Some(editor) = &self.editor {
+            self.render_editor(frame, area, ctx, editor);
+        }
+        if self.confirm_reset {
+            let dialog = crate::ui::centered(area, 56, 5);
+            frame.render_widget(Clear, dialog);
+            let block = Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(s.error)
+                .style(s.base);
+            frame.render_widget(
+                Paragraph::new(vec![
+                    Line::from(Span::styled(
+                        "Reset all settings to their defaults?",
+                        s.value,
+                    ))
+                    .centered(),
+                    Line::from(Span::styled(
+                        "Press y to reset, any other key to cancel.",
+                        s.accent,
+                    ))
+                    .centered(),
+                ])
+                .block(block),
+                dialog,
+            );
+        }
+    }
+
     fn render_editor(&self, frame: &mut Frame, area: Rect, ctx: &RenderContext, editor: &Editor) {
         let s = ctx.styles;
         let rect = crate::ui::centered(area, 80, area.height.saturating_sub(4).min(24));
