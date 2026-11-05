@@ -311,4 +311,16 @@ mod tests {
         assert_eq!(overview[1].1[0], None);
         assert!(overview[1].1[3].is_some());
     }
+
+    #[test]
+    fn char_classes_and_dates() {
+        assert_eq!(CharClass::Letters.next(), CharClass::Digits);
+        assert_eq!(CharClass::Specials.next(), CharClass::Letters);
+        assert_eq!(CharClass::Digits.letters(&[]).len(), 10);
+        let wed = NaiveDate::from_ymd_opt(2026, 11, 4).unwrap();
+        assert_eq!(
+            week_start(wed),
+            NaiveDate::from_ymd_opt(2026, 11, 2).unwrap()
+        );
+    }
 }
