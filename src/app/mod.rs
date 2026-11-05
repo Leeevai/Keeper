@@ -584,3 +584,85 @@ fn lesson_changed(a: &Settings, b: &Settings) -> bool {
     };
     strip(a) != strip(b)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::KeyEventState;
+
+    fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
+        Event::Key(KeyEvent {
+            code,
+            modifiers,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        })
+    }
+
+    fn app() -> (App, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        (App::new(storage).unwrap(), dir)
+    }
+
+    fn screen_text(app: &App, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| app.render(f, Instant::now())).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        (0..height)
+            .map(|y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Types the whole current lesson correctly, 120ms per key.
+    fn type_lesson(app: &mut App, start: Instant) -> Instant {
+        let mut t = start;
+        let n = app.practice.input.len();
+        for _ in 0..n {
+            let next = app.practice.input.remaining()[0];
+            t += std::time::Duration::from_millis(120);
+            app.handle_event(
+                key(
+                    KeyCode::Char(char::from_u32(next).unwrap()),
+                    KeyModifiers::NONE,
+                ),
+                t,
+            );
+        }
+        t
+    }
+
+    #[test]
+    fn maps_keys_to_typing_actions() {
+        let k = |code, m| InputAction::from_key(&KeyEvent::new(code, m));
+        assert_eq!(
+            k(KeyCode::Char('a'), KeyModifiers::NONE),
+            Some(InputAction::Char(97))
+        );
+        assert_eq!(
+            k(KeyCode::Char('A'), KeyModifiers::SHIFT),
+            Some(InputAction::Char(65))
+        );
+        assert_eq!(k(KeyCode::Char('a'), KeyModifiers::CONTROL), None);
+        assert_eq!(
+            k(KeyCode::Char('w'), KeyModifiers::CONTROL),
+            Some(InputAction::ClearWord)
+        );
+        assert_eq!(
+            k(KeyCode::Backspace, KeyModifiers::ALT),
+            Some(InputAction::ClearWord)
+        );
+        assert_eq!(
+            k(KeyCode::Backspace, KeyModifiers::NONE),
+            Some(InputAction::ClearChar)
+        );
+        assert_eq!(
+            k(KeyCode::Enter, KeyModifiers::NONE),
+            Some(InputAction::LineBreak)
+        );
+        assert_eq!(k(KeyCode::Esc, KeyModifiers::NONE), None);
+    }
+}
