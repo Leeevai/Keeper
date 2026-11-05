@@ -59,6 +59,34 @@ impl Distribution {
     pub fn is_empty(&self) -> bool {
         self.pmf.is_empty()
     }
+
+    pub fn pmf(&self, index: f64) -> f64 {
+        let i = index.round();
+        if i < 0.0 || i as usize >= self.len() {
+            0.0
+        } else {
+            self.pmf[i as usize]
+        }
+    }
+
+    /// The share of users below the index.
+    pub fn cdf(&self, index: f64) -> f64 {
+        let i = index.round();
+        if i < 0.0 {
+            0.0
+        } else if i as usize >= self.len() {
+            1.0
+        } else {
+            self.cdf[i as usize]
+        }
+    }
+
+    /// Maps a value from 0 to 1 to an index.
+    pub fn scale(&self, value: f64) -> f64 {
+        (value * (self.len() as f64 - 1.0))
+            .round()
+            .clamp(0.0, self.len() as f64 - 1.0)
+    }
 }
 
 /// A moving average over a window of `wnd` samples on each side.
