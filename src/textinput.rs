@@ -583,4 +583,58 @@ mod tests {
             Feedback::Failed
         );
     }
+
+    #[test]
+    fn stop_on_error_waits_for_the_right_key() {
+        let mut ti = input("abc", STOP);
+        assert_eq!(
+            type_keys(&mut ti, "ax"),
+            vec![Feedback::Succeeded, Feedback::Failed]
+        );
+        assert_eq!(ti.pos(), 1);
+        assert_eq!(attrs(&ti), "hcn");
+        assert_eq!(
+            type_keys(&mut ti, "bc"),
+            vec![Feedback::Recovered, Feedback::Succeeded]
+        );
+        assert_eq!(attrs(&ti), "hmh");
+        assert_eq!(make_stats(&ti.steps()).errors, 1);
+    }
+
+    #[test]
+    fn without_stop_garbage_must_be_deleted() {
+        let mut ti = input("abc", NO_STOP);
+        type_keys(&mut ti, "axy");
+        assert_eq!(attrs(&ti), "hggcn");
+        // The right key does not help while there is garbage.
+        type_keys(&mut ti, "b");
+        assert_eq!(attrs(&ti), "hgggcn");
+        type_keys(&mut ti, "\u{8}\u{8}\u{8}b");
+        assert_eq!(attrs(&ti), "hmc");
+        assert_eq!(ti.pos(), 2);
+    }
+
+    #[test]
+    fn forgives_a_replaced_character() {
+        let mut ti = input("abcdef", FORGIVE);
+        type_keys(&mut ti, "xbcd");
+        assert_eq!(ti.pos(), 4);
+        assert_eq!(attrs(&ti), "mhhhcn");
+    }
+
+    #[test]
+    fn forgives_a_skipped_character() {
+        let mut ti = input("abcdef", FORGIVE);
+        type_keys(&mut ti, "bcd");
+        assert_eq!(ti.pos(), 4);
+        assert_eq!(attrs(&ti), "mhhhcn");
+    }
+
+    #[test]
+    fn extra_space_between_words_is_ignored() {
+        let mut ti = input("ab cd", STOP);
+        type_keys(&mut ti, " ab  c");
+        assert_eq!(ti.pos(), 4);
+        assert_eq!(make_stats(&ti.steps()).errors, 0);
+    }
 }
