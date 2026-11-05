@@ -96,4 +96,77 @@ impl Term {
         }
         self.screen().contains(text)
     }
+
+    fn send(&mut self, bytes: &[u8]) {
+        self.writer.write_all(bytes).unwrap();
+        self.writer.flush().unwrap();
+        self.pump(Duration::from_millis(60));
+    }
+
+    /// Types every character with a pause, like a person would.
+    fn type_text(&mut self, text: &str, gap: Duration) {
+        for ch in text.chars() {
+            let mut buf = [0u8; 4];
+            self.writer
+                .write_all(ch.encode_utf8(&mut buf).as_bytes())
+                .unwrap();
+            self.writer.flush().unwrap();
+            self.pump(gap);
+        }
+    }
+
+    /// Reads the text inside the rounded box on the screen.
+    fn box_text(&self) -> String {
+        let screen = self.screen();
+        let lines: Vec<&str> = screen.lines().collect();
+        let top = lines
+            .iter()
+            .position(|l| l.contains('╭'))
+            .expect("a text box");
+        let bottom = lines
+            .iter()
+            .skip(top + 1)
+            .position(|l| l.contains('╰'))
+            .expect("a box bottom")
+            + top
+            + 1;
+        let left = lines[top].chars().position(|c| c == '╭').unwrap();
+        lines[top + 1..bottom]
+            .iter()
+            .map(|l| {
+                let inner: String = l.chars().skip(left + 1).take_while(|c| *c != '│').collect();
+                inner.replace('·', " ").trim().to_string()
+            })
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn resize(&mut self, rows: u16, cols: u16) {
+        self.master.resize(size(rows, cols)).unwrap();
+        self.parser.set_size(
+            NonZeroU16::new(rows).unwrap(),
+            NonZeroU16::new(cols).unwrap(),
+        );
+        self.pump(Duration::from_millis(300));
+    }
+
+    fn quit(&mut self) -> bool {
+        self.send(b"\x11"); // Ctrl+Q
+        let end = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < end {
+            if let Ok(Some(status)) = self.child.try_wait() {
+                self.pump(Duration::from_millis(100));
+                return status.success();
+            }
+            self.pump(Duration::from_millis(50));
+        }
+        false
+    }
+}
+
+impl Drop for Term {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+    }
 }
