@@ -1,5 +1,6 @@
 //! Keeper: a terminal typing tutor ported from keybr.com.
 
+pub mod app;
 pub mod assets;
 pub mod code;
 pub mod content;
