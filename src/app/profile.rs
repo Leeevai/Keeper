@@ -140,3 +140,43 @@ fn summary<'a>(
     }
     Paragraph::new(lines)
 }
+
+fn streak_table<'a>(
+    s: &Styles,
+    unit: SpeedUnit,
+    streaks: &[crate::result::Streak],
+) -> Paragraph<'a> {
+    if streaks.is_empty() {
+        return Paragraph::new(Span::styled(
+            "You don't have any accuracy streaks. Consider completing a lesson with the highest accuracy \
+             possible, regardless of typing speed.",
+            s.name,
+        ))
+        .wrap(ratatui::widgets::Wrap { trim: true });
+    }
+    let header = format!(
+        "{:<12}{:>9}  {:<14}{:>16}{:>14}{:>14}",
+        "Accuracy", "Lessons", "Start date", "Average speed", "Top speed", "Characters"
+    );
+    let mut lines = vec![Line::from(Span::styled(header, s.name))];
+    for streak in streaks {
+        let n = streak.results.len();
+        let avg = streak.results.iter().map(|r| r.speed).sum::<f64>() / n as f64;
+        let top = streak.results.iter().map(|r| r.speed).fold(0.0, f64::max);
+        let chars: u64 = streak.results.iter().map(|r| r.length as u64).sum();
+        let start = crate::result::local_date(streak.results[0].time_stamp);
+        lines.push(Line::from(Span::styled(
+            format!(
+                "{:<12}{:>9}  {:<14}{:>16}{:>14}{:>14}",
+                format!("≥ {:.0}%", streak.level * 100.0),
+                n,
+                start.format("%Y-%m-%d").to_string(),
+                unit.format(avg),
+                unit.format(top),
+                thousands(chars as f64),
+            ),
+            s.value,
+        )));
+    }
+    Paragraph::new(lines)
+}
