@@ -1115,3 +1115,62 @@ impl SettingsView {
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::{Emulation, LessonType, TestSource};
+
+    fn press(view: &mut SettingsView, settings: &mut Settings, code: KeyCode) -> SettingsAction {
+        let action = view.handle_key(KeyEvent::new(code, KeyModifiers::NONE), settings);
+        if let SettingsAction::Apply(s) = &action {
+            *settings = s.as_ref().clone().normalize();
+        }
+        action
+    }
+
+    fn select(view: &mut SettingsView, settings: &Settings, field: Field) {
+        view.selected = fields(settings)
+            .iter()
+            .position(|(_, f)| *f == field)
+            .expect("visible field");
+    }
+
+    #[test]
+    fn every_field_renders_in_short_terminals() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let styles = crate::ui::Styles::new(
+            crate::theme::Theme::get("dark"),
+            crate::settings::ColorMode::Truecolor,
+        );
+        let settings = Settings {
+            play_sounds: crate::settings::PlaySounds::All,
+            ..Settings::default()
+        };
+        let ctx = RenderContext {
+            styles: &styles,
+            settings: &settings,
+            daily_goal: crate::result::DailyGoal {
+                goal: 0,
+                value: 0.0,
+            },
+            toast: None,
+            now: 0.0,
+            focused: true,
+            data_dir: std::path::PathBuf::new(),
+        };
+        let mut view = SettingsView::default();
+        for selected in 0..fields(&settings).len() {
+            view.selected = selected;
+            for height in 1..=12 {
+                for width in [10, 40, 80, 130] {
+                    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                    terminal
+                        .draw(|f| view.render(f, f.area(), &ctx, &[]))
+                        .unwrap();
+                }
+            }
+        }
+    }
+}
