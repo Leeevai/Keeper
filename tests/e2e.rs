@@ -505,3 +505,56 @@ fn a_typing_test_runs_to_its_report() {
     assert!(term.wait_for("Start typing to begin the test.", Duration::from_secs(3)));
     assert!(term.quit());
 }
+
+#[test]
+fn a_timed_test_ends_without_more_typing() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    term.send(F2);
+    let text = term.box_text();
+    term.type_text(&text[..20], Duration::from_millis(60));
+    assert!(
+        term.wait_for("Press Enter or Esc", Duration::from_secs(20)),
+        "{}",
+        term.screen()
+    );
+    // 20 characters in 15 seconds is 16 words per minute.
+    assert!(term.screen().contains("Time  15s"), "{}", term.screen());
+    assert!(
+        term.screen().contains("Speed  16.0wpm"),
+        "{}",
+        term.screen()
+    );
+    assert!(term.quit());
+}
+
+#[test]
+fn survives_resizing() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    term.resize(16, 60);
+    assert!(
+        term.wait_for("Guided lessons", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    assert!(!term.screen().contains(" Q   W   E "), "{}", term.screen());
+    term.resize(10, 30);
+    term.resize(45, 140);
+    assert!(
+        term.wait_for(" Q   W   E ", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(F3);
+    term.resize(12, 40);
+    term.send(F4);
+    term.send(DOWN);
+    term.resize(50, 150);
+    assert!(
+        term.wait_for("Prefer natural words", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    assert!(term.quit());
+}
