@@ -626,3 +626,89 @@ fn step_list_size(value: u32, delta: i32) -> u32 {
     };
     (value as i32 + delta * step).clamp(10, 1000) as u32
 }
+
+/// A multi-line text editor for the custom text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Editor {
+    pub text: Vec<char>,
+    pub cursor: usize,
+}
+
+impl Editor {
+    pub fn new(text: &str) -> Self {
+        let text: Vec<char> = text.chars().collect();
+        let cursor = text.len();
+        Self { text, cursor }
+    }
+
+    pub fn insert(&mut self, s: &str) {
+        let s = s.replace("\r\n", "\n");
+        for c in s.chars() {
+            if self.text.len() >= 10_000 {
+                break;
+            }
+            let c = if c == '\r' { '\n' } else { c };
+            self.text.insert(self.cursor, c);
+            self.cursor += 1;
+        }
+    }
+
+    fn line_start(&self, pos: usize) -> usize {
+        self.text[..pos]
+            .iter()
+            .rposition(|c| *c == '\n')
+            .map_or(0, |i| i + 1)
+    }
+
+    fn line_end(&self, pos: usize) -> usize {
+        self.text[pos..]
+            .iter()
+            .position(|c| *c == '\n')
+            .map_or(self.text.len(), |i| pos + i)
+    }
+
+    /// Handles a key, returning `Some(true)` to save and `Some(false)` to cancel.
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<bool> {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match key.code {
+            KeyCode::Esc => return Some(false),
+            KeyCode::Char('s' | 'd') if ctrl => return Some(true),
+            KeyCode::Char('u') if ctrl => {
+                self.text.clear();
+                self.cursor = 0;
+            }
+            KeyCode::Char(c) if !ctrl => self.insert(&c.to_string()),
+            KeyCode::Enter => self.insert("\n"),
+            KeyCode::Tab => self.insert(" "),
+            KeyCode::Backspace if self.cursor > 0 => {
+                self.cursor -= 1;
+                self.text.remove(self.cursor);
+            }
+            KeyCode::Delete if self.cursor < self.text.len() => {
+                self.text.remove(self.cursor);
+            }
+            KeyCode::Left => self.cursor = self.cursor.saturating_sub(1),
+            KeyCode::Right => self.cursor = (self.cursor + 1).min(self.text.len()),
+            KeyCode::Home => self.cursor = self.line_start(self.cursor),
+            KeyCode::End => self.cursor = self.line_end(self.cursor),
+            KeyCode::Up => {
+                let start = self.line_start(self.cursor);
+                if start > 0 {
+                    let column = self.cursor - start;
+                    let prev = self.line_start(start - 1);
+                    self.cursor = (prev + column).min(start - 1);
+                }
+            }
+            KeyCode::Down => {
+                let start = self.line_start(self.cursor);
+                let end = self.line_end(self.cursor);
+                if end < self.text.len() {
+                    let column = self.cursor - start;
+                    self.cursor = (end + 1 + column).min(self.line_end(end + 1));
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+}
