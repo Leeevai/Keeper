@@ -1,5 +1,7 @@
 //! Shared terminal UI pieces: styles, the keyboard and the text area.
 
+pub mod text;
+
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
