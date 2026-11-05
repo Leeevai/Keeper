@@ -96,3 +96,80 @@ fn rule_set(name: &str) -> &'static Rules {
     });
     &all[name]
 }
+
+fn find_flags(prod: &Prod, flags: &mut HashSet<String>) {
+    match prod {
+        Prod::Cond { flag, cond, .. } => {
+            flags.insert(flag.clone());
+            find_flags(cond, flags);
+        }
+        Prod::Span { span, .. } => find_flags(span, flags),
+        Prod::Opt { opt, .. } => find_flags(opt, flags),
+        Prod::Seq { seq } => seq.iter().for_each(|p| find_flags(p, flags)),
+        Prod::Alt { alt } => alt.iter().for_each(|p| find_flags(p, flags)),
+        Prod::Lit(_) | Prod::Ref { .. } => {}
+    }
+}
+
+/// The output buffer stops generation when its limit is reached.
+struct Output {
+    limit: usize,
+    text: StyledText,
+    length: usize,
+    separator: String,
+}
+
+struct Stop;
+
+impl Output {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            text: Vec::new(),
+            length: 0,
+            separator: String::new(),
+        }
+    }
+
+    fn length(&self) -> usize {
+        self.length + self.separator.chars().count()
+    }
+
+    fn separate(&mut self, text: &str) -> Result<(), Stop> {
+        if !self.text.is_empty() {
+            let n = text.chars().count();
+            if n > 0 && self.length + n > self.limit {
+                return Err(Stop);
+            }
+            self.separator = text.to_string();
+        }
+        Ok(())
+    }
+
+    fn append(&mut self, text: &str, cls: Option<Class>) -> Result<(), Stop> {
+        if (text == " " || text == "\n" || text == "\t") && cls.is_none() {
+            return self.separate(text);
+        }
+        let n = text.chars().count();
+        if n > 0 {
+            if self.length + self.separator.chars().count() + n > self.limit {
+                return Err(Stop);
+            }
+            if !self.separator.is_empty() {
+                let sep = std::mem::take(&mut self.separator);
+                self.length += sep.chars().count();
+                // Line breaks and tabs are typed as spaces.
+                self.text.push(Span {
+                    text: " ".repeat(sep.chars().count()),
+                    cls: None,
+                });
+            }
+            self.text.push(Span {
+                text: text.to_string(),
+                cls,
+            });
+            self.length += n;
+        }
+        Ok(())
+    }
+}
