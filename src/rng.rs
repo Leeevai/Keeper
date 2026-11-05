@@ -40,3 +40,29 @@ impl Rng for Lcg {
         self.x as f64 / Self::M as f64
     }
 }
+
+/// Selects a random element from a list of uniform elements.
+pub fn random_sample<'a, T>(list: &'a [T], rng: &mut dyn Rng) -> &'a T {
+    assert!(!list.is_empty(), "cannot sample from an empty list");
+    let index = (rng.next_f64() * list.len() as f64) as usize;
+    &list[index.min(list.len() - 1)]
+}
+
+/// Selects a random element from a list of weighted elements.
+pub fn weighted_random_sample<'a, T>(
+    list: &'a [T],
+    weight: impl Fn(&T) -> f64,
+    rng: &mut dyn Rng,
+) -> &'a T {
+    assert!(!list.is_empty(), "cannot sample from an empty list");
+    let sum: f64 = list.iter().map(&weight).sum();
+    let mut r = rng.next_f64() * sum;
+    for v in list {
+        let w = weight(v);
+        if r <= w {
+            return v;
+        }
+        r -= w;
+    }
+    &list[list.len() - 1]
+}
