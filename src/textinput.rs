@@ -218,6 +218,79 @@ impl TextInput {
         Feedback::Succeeded
     }
 
+    pub fn append_line_break(&mut self, time_stamp: f64, time_to_type: f64) -> Feedback {
+        self.append_char(time_stamp, SPACE, time_to_type)
+    }
+
+    pub fn append_char(&mut self, time_stamp: f64, cp: u32, time_to_type: f64) -> Feedback {
+        if self.completed() {
+            return Feedback::Failed;
+        }
+        let expected = self.at(self.pos()).cp;
+
+        if expected != SPACE && cp == SPACE {
+            if self.settings.space_skips_words
+                && ((self.pos() > 0 && self.at(self.pos() - 1).cp != SPACE) || self.typo)
+            {
+                self.skip_word(time_stamp);
+                return Feedback::Recovered;
+            }
+            if self.garbage.is_empty() && !self.typo {
+                // A space between words is ignored.
+                return Feedback::Succeeded;
+            }
+        }
+
+        if (expected == cp || normalize_cp(expected) == cp)
+            && (self.settings.forgive_errors || self.garbage.is_empty())
+        {
+            let typo = self.typo;
+            let ch = self.at(self.pos());
+            self.add_step(
+                Step {
+                    time_stamp,
+                    cp,
+                    time_to_type,
+                    typo,
+                },
+                ch,
+            );
+            self.garbage.clear();
+            self.typo = false;
+            return if typo {
+                Feedback::Recovered
+            } else {
+                Feedback::Succeeded
+            };
+        }
+
+        self.typo = true;
+        if (!self.settings.stop_on_error || self.settings.forgive_errors)
+            && self.garbage.len() < GARBAGE_BUFFER_LENGTH
+        {
+            self.garbage.push((
+                Step {
+                    time_stamp,
+                    cp,
+                    time_to_type,
+                    typo: false,
+                },
+                Char {
+                    cp,
+                    attr: Attr::Garbage,
+                    cls: None,
+                },
+            ));
+        }
+        if self.settings.forgive_errors
+            && (self.handle_replaced_character() || self.handle_skipped_character())
+        {
+            Feedback::Recovered
+        } else {
+            Feedback::Failed
+        }
+    }
+
     fn add_step(&mut self, step: Step, ch: Char) {
         let attr = if step.typo { Attr::Miss } else { Attr::Hit };
         self.steps.push((step, Char { attr, ..ch }));
