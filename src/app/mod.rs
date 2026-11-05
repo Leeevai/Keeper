@@ -184,6 +184,98 @@ impl App {
             .find(|(_, until)| *until > now)
             .map(|(m, _)| m.as_str())
     }
+
+    /// Changes the settings, saves them and rebuilds what depends on them.
+    pub fn apply_settings(&mut self, settings: Settings) {
+        let settings = settings.normalize();
+        if settings == self.settings {
+            return;
+        }
+        let rebuild = lesson_changed(&self.settings, &settings);
+        self.settings = settings;
+        if let Err(e) = self.storage.save_settings(&self.settings) {
+            let now = self.now_ms(Instant::now());
+            self.notify(format!("Could not save the settings: {e}"), now);
+        }
+        self.styles = Styles::new(Theme::get(&self.settings.theme), self.settings.color_mode);
+        if rebuild {
+            self.practice = Practice::new(&self.settings, &self.results);
+        }
+        if !self.typing_test.started() || self.typing_test.report.is_some() {
+            self.typing_test = TypingTest::new(&self.settings);
+        }
+    }
+
+    fn play(&mut self, feedback: crate::textinput::Feedback) {
+        let s = &self.settings;
+        self.sounds
+            .play(s.play_sounds, s.sound_theme, s.sound_volume, feedback);
+    }
+
+    fn save_test(&mut self, now: f64) {
+        if let Some(report) = &self.typing_test.report {
+            let result = report.result.clone();
+            if result.length > 0 {
+                if let Err(e) = self.storage.append_test(&result) {
+                    self.notify(format!("Could not save the test: {e}"), now);
+                }
+                self.tests.push(result);
+            }
+        }
+    }
+
+    fn practice_key(&mut self, key: KeyEvent, at: Instant) {
+        let ctrl = is_ctrl(&key);
+        match key.code {
+            KeyCode::Esc => self.practice.restart(),
+            KeyCode::Left if ctrl => self.practice.restart(),
+            KeyCode::Char('r') if ctrl => self.practice.restart(),
+            KeyCode::Right if ctrl => self.practice.next_lesson(),
+            KeyCode::Char('n') if ctrl => self.practice.next_lesson(),
+            KeyCode::Char('v') if ctrl => {
+                let settings = Settings {
+                    view: self.settings.view.next(),
+                    ..self.settings.clone()
+                };
+                self.apply_settings(settings);
+            }
+            _ => {
+                if let Some(action) = InputAction::from_key(&key) {
+                    let now = self.now_ms(at);
+                    let feedback = self.practice.handle(action, now);
+                    self.play(feedback);
+                    if self.practice.completed() {
+                        self.finish_lesson(now);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Saves the result of the completed lesson and starts the next one.
+    fn finish_lesson(&mut self, now: f64) {
+        let stats = self.practice.stats();
+        let result = TypingResult::from_stats(
+            &self.practice.lesson.layout().id,
+            self.practice.lesson.lesson_type.text_type(),
+            chrono::Utc::now().timestamp_millis(),
+            &stats,
+        );
+        if result.validate() {
+            let goal_before = self.daily_goal().value;
+            if let Err(e) = self.storage.append_result(&result) {
+                self.notify(format!("Could not save the result: {e}"), now);
+            }
+            self.results.push(result.clone());
+            for event in self.practice.accept(&result, self.settings.speed_unit) {
+                self.notify(event, now);
+            }
+            if goal_before < 1.0 && self.daily_goal().value >= 1.0 {
+                self.notify("Daily goal reached, well done!", now);
+            }
+        }
+        self.practice.next_lesson();
+    }
 }
 
 /// Drops the last hints until the rest fits in the width.
