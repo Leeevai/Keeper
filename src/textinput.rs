@@ -463,4 +463,33 @@ impl Histogram {
     pub fn get(&self, cp: u32) -> Option<&Sample> {
         self.samples.get(&cp)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Sample> {
+        self.samples.values()
+    }
+
+    pub fn validate(&self) -> bool {
+        self.samples.len() >= 3 && self.samples.values().all(Sample::is_valid)
+    }
+}
+
+/// The outcome of typing a text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stats {
+    /// Milliseconds from the first to the last key press.
+    pub time: u32,
+    /// Characters per minute.
+    pub speed: f64,
+    pub length: u32,
+    pub errors: u32,
+    pub accuracy: f64,
+    pub histogram: Histogram,
+}
+
+pub fn compute_speed(length: usize, time: f64) -> f64 {
+    if time > 0.0 {
+        length as f64 / (time / 1000.0) * 60.0
+    } else {
+        0.0
+    }
 }
