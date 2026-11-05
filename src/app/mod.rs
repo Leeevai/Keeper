@@ -904,4 +904,54 @@ mod tests {
         // Every lesson type produced a saved result.
         assert_eq!(app.results.len(), crate::settings::LessonType::ALL.len());
     }
+
+    #[test]
+    fn hints_drop_what_does_not_fit() {
+        assert_eq!(fit_hints("a · b · c", 80), "a · b · c");
+        assert_eq!(fit_hints("aaaa · bbbb · cccc", 11), "aaaa · bbbb");
+        assert_eq!(fit_hints("aaaa · bbbb", 2), "aaaa");
+        let (mut app, _dir) = app();
+        app.screen = Screen::Settings;
+        let text = screen_text(&app, 80, 24);
+        let last = text.lines().last().unwrap();
+        assert!(last.contains("Enter edit · Esc back"), "{last}");
+        app.screen = Screen::Profile;
+        let last = screen_text(&app, 80, 24)
+            .lines()
+            .last()
+            .unwrap()
+            .to_string();
+        assert!(
+            last.contains("Esc back") && !last.contains("R reset"),
+            "{last}"
+        );
+        // The narrow settings list still shows most options.
+        assert!(text.contains("Target typing speed"), "{text}");
+    }
+
+    #[test]
+    fn only_lesson_settings_regenerate_the_lesson() {
+        let a = Settings::default();
+        assert!(!lesson_changed(
+            &a,
+            &Settings {
+                theme: "dark".into(),
+                ..a.clone()
+            }
+        ));
+        assert!(lesson_changed(
+            &a,
+            &Settings {
+                target_speed: 300,
+                ..a.clone()
+            }
+        ));
+        assert!(lesson_changed(
+            &a,
+            &Settings {
+                layout: "en-dvorak".into(),
+                ..a.clone()
+            }
+        ));
+    }
 }
