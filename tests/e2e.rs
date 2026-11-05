@@ -237,3 +237,67 @@ fn typing_lessons_saves_results_and_updates_the_metrics() {
     assert!(term.screen().contains("Speed:"), "{}", term.screen());
     assert!(term.quit());
 }
+
+#[test]
+fn escape_restarts_and_ctrl_n_skips() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    let lesson = term.box_text();
+    let first: String = lesson.split(' ').next().unwrap().to_string();
+    term.type_text(&first, Duration::from_millis(60));
+    term.send(ESC);
+    assert_eq!(term.box_text(), lesson);
+    term.send(b"\x0e"); // Ctrl+N
+    term.pump(Duration::from_millis(200));
+    assert_ne!(term.box_text(), lesson);
+    assert!(term.quit());
+}
+
+#[test]
+fn every_screen_renders() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start(home.path(), 42, 130);
+    term.send(F2);
+    assert!(
+        term.wait_for("Start typing to begin the test.", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(F3);
+    assert!(
+        term.wait_for("All Time Statistics", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(PAGE_DOWN);
+    term.send(PAGE_DOWN);
+    assert!(
+        term.wait_for("Typing Speed", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(F4);
+    assert!(
+        term.wait_for("Target typing speed", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    assert!(
+        term.screen().contains("Lesson preview"),
+        "{}",
+        term.screen()
+    );
+    term.send(F5);
+    assert!(
+        term.wait_for("How it works", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    term.send(TAB);
+    assert!(
+        term.wait_for("All keys:", Duration::from_secs(3)),
+        "{}",
+        term.screen()
+    );
+    assert!(term.quit());
+}
