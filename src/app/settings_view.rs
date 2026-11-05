@@ -1338,4 +1338,22 @@ mod tests {
         e.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert_eq!(e.text(), "ab\ncd");
     }
+
+    #[test]
+    fn wraps_help_text() {
+        assert_eq!(wrapped_height("aaa bbb ccc", 7), 2);
+        assert_eq!(wrapped_height("aaa bbb ccc", 11), 1);
+        assert_eq!(wrapped_height("", 5), 1);
+    }
+
+    #[test]
+    fn list_sizes_step_by_ten_then_fifty() {
+        assert_eq!(step_list_size(10, -1), 10);
+        assert_eq!(step_list_size(90, 1), 100);
+        assert_eq!(step_list_size(100, 1), 150);
+        assert_eq!(step_list_size(100, -1), 90);
+        assert_eq!(step_list_size(1000, 1), 1000);
+        assert_eq!(cycle(&[1, 2, 3], &1, -1), 3);
+        assert_eq!(cycle(&[1, 2, 3], &3, 1), 1);
+    }
 }
