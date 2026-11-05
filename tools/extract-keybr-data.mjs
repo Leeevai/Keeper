@@ -438,3 +438,8 @@ const soundDir = path.join(PKG, "keybr-textinput-sounds", "assets");
 for (const file of fs.readdirSync(soundDir)) {
   if (file.endsWith(".mp3")) write(`sounds/${file}`, fs.readFileSync(path.join(soundDir, file)));
 }
+
+console.log(
+  `wrote ${languages.length} languages, ${layouts.length} layouts, ${geometries.length} geometries, ` +
+    `${books.length} books, ${syntaxes.length} code syntaxes to ${OUT}`,
+);
