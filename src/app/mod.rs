@@ -49,3 +49,36 @@ impl InputAction {
 fn is_ctrl(key: &KeyEvent) -> bool {
     key.modifiers.contains(KeyModifiers::CONTROL) && !key.modifiers.contains(KeyModifiers::ALT)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    Practice,
+    TypingTest,
+    Profile,
+    Settings,
+    Help,
+}
+
+impl Screen {
+    pub const ALL: [Screen; 5] = [
+        Screen::Practice,
+        Screen::TypingTest,
+        Screen::Profile,
+        Screen::Settings,
+        Screen::Help,
+    ];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Screen::Practice => "Practice",
+            Screen::TypingTest => "Typing test",
+            Screen::Profile => "Profile",
+            Screen::Settings => "Settings",
+            Screen::Help => "Help",
+        }
+    }
+
+    fn index(self) -> usize {
+        Self::ALL.iter().position(|s| *s == self).unwrap_or(0)
+    }
+}
