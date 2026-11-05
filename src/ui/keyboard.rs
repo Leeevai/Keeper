@@ -298,4 +298,42 @@ mod tests {
             .is_empty()
         );
     }
+
+    #[test]
+    fn highlights_keys_to_press() {
+        let keyboard = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+        assert_eq!(
+            KeyboardView::pointers_for(&keyboard, u32::from('a')),
+            vec!["KeyA"]
+        );
+        assert_eq!(
+            KeyboardView::pointers_for(&keyboard, u32::from('A')),
+            vec!["KeyA", "ShiftRight"]
+        );
+        assert_eq!(
+            KeyboardView::pointers_for(&keyboard, u32::from('P')),
+            vec!["KeyP", "ShiftLeft"]
+        );
+        assert!(KeyboardView::pointers_for(&keyboard, u32::from('é')).is_empty());
+        let styles = Styles::new(Theme::get("light"), ColorMode::Truecolor);
+        let mut view = KeyboardView::new(&keyboard, &styles);
+        view.pointers = vec!["KeyA".into()];
+        let pointer = styles.color(styles.palette.pointer);
+        let buf = render(&keyboard, view, 60, 9);
+        let a = (0..60).find(|&x| buf[(x, 4)].symbol() == "A").unwrap();
+        assert_eq!(buf[(a, 4)].bg, pointer);
+    }
+
+    #[test]
+    fn renders_every_geometry() {
+        let styles = Styles::new(Theme::get("dark"), ColorMode::Ansi256);
+        for layout in Layout::all() {
+            for geometry in &layout.geometries {
+                let keyboard = Keyboard::new(layout, geometry, "standard");
+                let (w, h) = KeyboardView::size(&keyboard, true);
+                let buf = render(&keyboard, KeyboardView::new(&keyboard, &styles), w, h);
+                assert!(!text(&buf).trim().is_empty(), "{} {}", layout.id, geometry);
+            }
+        }
+    }
 }
