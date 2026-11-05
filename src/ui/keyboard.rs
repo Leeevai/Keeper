@@ -88,4 +88,146 @@ impl<'a> KeyboardView<'a> {
         }
         keys
     }
+
+    fn label(&self, shape: &KeyShape, width: usize) -> String {
+        let label = if !shape.labels.is_empty() {
+            match shape.labels.join(" ").as_str() {
+                "Backspace" | "Back space" => "⌫".to_string(),
+                "Tab" => "⇥".into(),
+                "Caps Lock" => "⇪".into(),
+                "Enter" => "⏎".into(),
+                "Shift" => "⇧".into(),
+                other => other.to_string(),
+            }
+        } else {
+            match self.keyboard.characters(&shape.id).first() {
+                Some(Some(Character::CodePoint(cp))) if *cp == 0x20 => String::new(),
+                Some(Some(ch @ Character::CodePoint(_))) => {
+                    let s = ch.label();
+                    let upper = s.to_uppercase();
+                    if upper.chars().count() == 1 { upper } else { s }
+                }
+                Some(Some(ch)) => ch.label(),
+                _ => String::new(),
+            }
+        };
+        truncate(&label, width)
+    }
+
+    fn background(&self, shape: &KeyShape) -> Rgb {
+        let p = &self.styles.palette;
+        if let Some((id, ok)) = &self.flash
+            && *id == shape.id
+        {
+            return if *ok { p.fast_key } else { p.error };
+        }
+        if self.pointers.contains(&shape.id) {
+            return p.pointer;
+        }
+        if let Some(heat) = &self.heat {
+            let none = if self.styles.themed {
+                p.panel.mix(p.border, 50.0)
+            } else {
+                Rgb(90, 90, 90)
+            };
+            return heat.get(&shape.id).copied().unwrap_or(none);
+        }
+        let neutral = if self.styles.themed {
+            p.border
+        } else {
+            Rgb(150, 150, 150)
+        };
+        let color = if self.zone_colors {
+            shape
+                .finger()
+                .and_then(|f| self.styles.zone_rgb(f))
+                .unwrap_or(neutral)
+        } else {
+            neutral
+        };
+        if self.is_dimmed(shape) {
+            let background = if self.styles.themed {
+                p.background
+            } else {
+                Rgb(128, 128, 128)
+            };
+            color.mix(background, 35.0)
+        } else {
+            color
+        }
+    }
+
+    fn is_dimmed(&self, shape: &KeyShape) -> bool {
+        match &self.active {
+            Some(active) if shape.labels.is_empty() => !self
+                .keyboard
+                .characters(&shape.id)
+                .iter()
+                .flatten()
+                .any(|c| match c {
+                    Character::CodePoint(cp) => active.contains(cp),
+                    _ => false,
+                }),
+            _ => false,
+        }
+    }
+}
+
+fn truncate(s: &str, width: usize) -> String {
+    let mut out = String::new();
+    for ch in s.chars() {
+        if (out.clone() + &ch.to_string()).width() > width {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+impl Widget for KeyboardView<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let (_, tall) = Self::size(self.keyboard, true);
+        let gaps = area.height >= tall;
+        let (width, height) = Self::size(self.keyboard, gaps);
+        if width == 0 || area.width < width || area.height < height {
+            return;
+        }
+        let origin = super::centered(area, width, height);
+        let row = |y: f64| -> u16 {
+            if gaps {
+                (y * 2.0).round() as u16
+            } else {
+                y.round() as u16
+            }
+        };
+        for shape in &self.keyboard.shapes {
+            let x0 = (shape.x * UNIT).round() as u16;
+            let x1 = ((shape.x + shape.w) * UNIT).round() as u16 - 1;
+            let y0 = row(shape.y);
+            let y1 = row(shape.y + shape.h)
+                .saturating_sub(if gaps { 2 } else { 1 })
+                .max(y0);
+            let bg = self.background(shape);
+            let style = self.styles.on(bg);
+            for y in y0..=y1 {
+                for x in x0..x1 {
+                    if let Some(cell) = buf.cell_mut((origin.x + x, origin.y + y)) {
+                        cell.set_symbol(" ").set_style(style);
+                    }
+                }
+            }
+            let key_width = (x1 - x0) as usize;
+            let label = self.label(shape, key_width);
+            let label_width = label.width() as u16;
+            let lx = origin.x + x0 + (x1 - x0).saturating_sub(label_width) / 2;
+            let mut label_style = style;
+            if shape.homing {
+                label_style = label_style.add_modifier(Modifier::UNDERLINED);
+            }
+            if self.pointers.contains(&shape.id) {
+                label_style = label_style.add_modifier(Modifier::BOLD);
+            }
+            buf.set_string(lx, origin.y + y0, &label, label_style);
+        }
+    }
 }
