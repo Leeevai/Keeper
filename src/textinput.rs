@@ -100,3 +100,76 @@ pub enum Feedback {
     Recovered,
     Failed,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextInputSettings {
+    /// Stop the cursor until the right key is pressed.
+    pub stop_on_error: bool,
+    /// Recover automatically from a replaced or a skipped character.
+    pub forgive_errors: bool,
+    /// The space key skips the rest of the current word.
+    pub space_skips_words: bool,
+}
+
+impl Default for TextInputSettings {
+    fn default() -> Self {
+        Self {
+            stop_on_error: true,
+            forgive_errors: true,
+            space_skips_words: false,
+        }
+    }
+}
+
+const RECOVER_BUFFER_LENGTH: usize = 3;
+const GARBAGE_BUFFER_LENGTH: usize = 10;
+
+pub struct TextInput {
+    pub text: StyledText,
+    pub settings: TextInputSettings,
+    chars: Vec<Char>,
+    steps: Vec<(Step, Char)>,
+    garbage: Vec<(Step, Char)>,
+    typo: bool,
+}
+
+impl TextInput {
+    pub fn new(text: StyledText, settings: TextInputSettings) -> Self {
+        let chars = split(&text);
+        Self {
+            text,
+            settings,
+            chars,
+            steps: Vec::new(),
+            garbage: Vec::new(),
+            typo: false,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.steps.clear();
+        self.garbage.clear();
+        self.typo = false;
+    }
+
+    pub fn len(&self) -> usize {
+        self.chars.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.chars.is_empty()
+    }
+
+    pub fn at(&self, index: usize) -> Char {
+        self.chars[index]
+    }
+
+    /// The position of the cursor.
+    pub fn pos(&self) -> usize {
+        self.steps.len()
+    }
+
+    pub fn completed(&self) -> bool {
+        self.pos() == self.len()
+    }
+}
