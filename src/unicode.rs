@@ -148,3 +148,48 @@ pub fn filter_text(text: &str, allowed: impl Fn(u32) -> bool) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ascii(cp: u32) -> bool {
+        (0x21..0x7f).contains(&cp)
+    }
+
+    #[test]
+    fn filters_and_collapses_whitespace() {
+        assert_eq!(filter_text("  hello \t  world  ", ascii), "hello world");
+        assert_eq!(filter_text("a\n\n b", ascii), "a\nb");
+        assert_eq!(filter_text("a☃b", ascii), "a b");
+        // A dash can be typed with the hyphen key, so it is kept.
+        assert_eq!(filter_text("a—b", ascii), "a—b");
+        assert_eq!(filter_text("abc", |cp| cp != u32::from('b')), "a c");
+    }
+
+    #[test]
+    fn expands_accented_letters() {
+        assert_eq!(filter_text("café", ascii), "cafe");
+        assert_eq!(filter_text("Æsir", ascii), "AEsir");
+        // Decomposed input is composed first.
+        assert_eq!(filter_text("cafe\u{0301}", ascii), "cafe");
+    }
+
+    #[test]
+    fn keeps_typographic_quotes_that_can_be_typed() {
+        assert_eq!(filter_text("“hi”", ascii), "“hi”");
+        assert_eq!(normalize_cp(u32::from('“')), u32::from('"'));
+        assert_eq!(normalize_cp(u32::from('’')), u32::from('\''));
+        assert_eq!(normalize_cp(u32::from('a')), u32::from('a'));
+        assert_eq!(
+            filter_text("“hi”", |cp| cp != u32::from('"') && ascii(cp)),
+            "hi"
+        );
+    }
+
+    #[test]
+    fn combines_diacritics() {
+        assert_eq!(combine_diacritic(u32::from('e'), 0x0301), u32::from('é'));
+        assert_eq!(combine_diacritic(u32::from('q'), 0x0301), u32::from('q'));
+    }
+}
