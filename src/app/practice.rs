@@ -469,3 +469,82 @@ impl Practice {
         lines
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::TextType;
+    use crate::settings::SpeedUnit;
+
+    fn type_all(p: &mut Practice, start: f64) -> f64 {
+        let mut now = start;
+        while !p.completed() {
+            let next = p.input.remaining()[0];
+            now += 150.0;
+            p.handle(InputAction::Char(next), now);
+        }
+        now
+    }
+
+    #[test]
+    fn typing_a_lesson_produces_a_valid_result() {
+        let settings = Settings::default();
+        let mut p = Practice::with_rng(&settings, &[], Lcg::new(1));
+        assert!(!p.completed());
+        type_all(&mut p, 0.0);
+        let stats = p.stats();
+        assert_eq!(stats.errors, 0);
+        assert!((stats.speed - 400.0).abs() < 5.0, "{}", stats.speed);
+        let result = TypingResult::from_stats("en-us", TextType::Generated, 0, &stats);
+        assert!(result.validate());
+        let events = p.accept(&result, SpeedUnit::Wpm);
+        // 400 CPM is above the target, every key gets calibrated.
+        assert!(events.is_empty() || events.iter().all(|e| e.starts_with("New key")));
+        p.next_lesson();
+        assert!(!p.completed());
+    }
+
+    #[test]
+    fn fast_typing_unlocks_new_keys() {
+        let settings = Settings::default();
+        let mut results = Vec::new();
+        let mut events = Vec::new();
+        let mut p = Practice::with_rng(&settings, &results, Lcg::new(2));
+        let mut now = 0.0;
+        for i in 0..6 {
+            now = type_all(&mut p, now + 1000.0);
+            let result = TypingResult::from_stats("en-us", TextType::Generated, i, &p.stats());
+            events.extend(p.accept(&result, SpeedUnit::Wpm));
+            results.push(result);
+            p.next_lesson();
+        }
+        assert!(
+            events.iter().any(|e| e.starts_with("New key unlocked")),
+            "{events:?}"
+        );
+        assert!(p.lesson_keys.included().count() > 6);
+    }
+
+    #[test]
+    fn emulates_the_practiced_layout() {
+        let settings = Settings {
+            layout: "en-colemak".into(),
+            ..Settings::default()
+        };
+        let mut p = Practice::with_rng(&settings, &[], Lcg::new(3));
+        let expected = p.input.remaining()[0];
+        // Find the QWERTY key at the position of the expected Colemak letter.
+        let colemak = &p.lesson.keyboard;
+        let key = colemak.combo(expected).unwrap().key.clone();
+        let qwerty = Keyboard::new(crate::keyboard::Layout::get("en-us"), "ansi101", "standard");
+        let typed = qwerty.characters(&key)[0]
+            .as_ref()
+            .unwrap()
+            .code_point()
+            .unwrap();
+        assert_eq!(
+            p.handle(InputAction::Char(typed), 100.0),
+            Feedback::Succeeded
+        );
+    }
+}
