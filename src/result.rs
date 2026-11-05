@@ -81,3 +81,60 @@ impl TypingResult {
         }
     }
 }
+
+pub fn local_date(time_stamp: i64) -> NaiveDate {
+    match Local.timestamp_millis_opt(time_stamp).single() {
+        Some(t) => t.date_naive(),
+        None => DateTime::from_timestamp_millis(time_stamp)
+            .unwrap_or_default()
+            .date_naive(),
+    }
+}
+
+/// The serialized form of a result, compatible with the data that
+/// keybr.com exports from the profile page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultRecord {
+    pub layout: String,
+    pub text_type: TextType,
+    #[serde(deserialize_with = "deserialize_time_stamp")]
+    pub time_stamp: i64,
+    pub length: u32,
+    pub time: u32,
+    pub errors: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    pub histogram: Vec<Sample>,
+}
+
+impl ResultRecord {
+    pub fn into_result(self) -> TypingResult {
+        TypingResult::new(
+            self.layout,
+            self.text_type,
+            self.time_stamp,
+            self.length,
+            self.time,
+            self.errors,
+            Histogram::new(self.histogram),
+        )
+    }
+}
+
+fn deserialize_time_stamp<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Ts {
+        Millis(i64),
+        Float(f64),
+        Text(String),
+    }
+    match Ts::deserialize(d)? {
+        Ts::Millis(v) => Ok(v),
+        Ts::Float(v) => Ok(v as i64),
+        Ts::Text(s) => DateTime::parse_from_rfc3339(&s)
+            .map(|t| t.timestamp_millis())
+            .map_err(serde::de::Error::custom),
+    }
+}
