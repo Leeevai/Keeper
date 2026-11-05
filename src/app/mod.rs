@@ -1,5 +1,7 @@
 //! The application: screens, key bindings and the state they share.
 
+pub mod practice;
+
 use std::time::Instant;
 
 use anyhow::Result;
@@ -16,6 +18,7 @@ use crate::sound::Sounds;
 use crate::storage::{Storage, TestResult};
 use crate::theme::Theme;
 use crate::ui::Styles;
+use practice::Practice;
 
 /// What a key press does to the text being typed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
