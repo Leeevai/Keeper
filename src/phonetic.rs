@@ -190,6 +190,82 @@ pub struct Entry {
     pub frequency: u8,
 }
 
+/// The Markov chain of a language model.
+pub struct TransitionTable {
+    pub order: usize,
+    pub alphabet: Vec<u32>,
+    index: HashMap<u32, usize>,
+    offsets: Vec<usize>,
+    segments: Vec<Vec<Entry>>,
+}
+
+impl TransitionTable {
+    pub fn load(data: &[u8]) -> Result<Self> {
+        let mut reader = Reader { data, pos: 0 };
+        for &c in SIGNATURE {
+            ensure!(reader.u8()? == c, "invalid model signature");
+        }
+        let order = reader.u8()? as usize;
+        let size = reader.u8()? as usize;
+        ensure!(order >= 1 && size > 0, "invalid model header");
+        let mut alphabet = Vec::with_capacity(size);
+        for _ in 0..size {
+            alphabet.push(reader.u16()? as u32);
+        }
+        let index: HashMap<u32, usize> = alphabet
+            .iter()
+            .enumerate()
+            .map(|(i, &cp)| (cp, i))
+            .collect();
+        let offsets = (0..order)
+            .map(|i| size.pow((order - i - 1) as u32))
+            .collect();
+        let count = size.pow(order as u32 - 1);
+        let mut segments = Vec::with_capacity(count);
+        for _ in 0..count {
+            let length = reader.u8()? as usize;
+            ensure!(length <= size, "invalid segment length");
+            let mut segment = Vec::with_capacity(length);
+            for _ in 0..length {
+                let i = reader.u8()? as usize;
+                ensure!(i < size, "invalid letter index");
+                let frequency = reader.u8()?;
+                ensure!(frequency > 0, "invalid frequency");
+                segment.push(Entry {
+                    cp: alphabet[i],
+                    frequency,
+                });
+            }
+            segments.push(segment);
+        }
+        if reader.pos != data.len() {
+            bail!("trailing data in model");
+        }
+        Ok(Self {
+            order,
+            alphabet,
+            index,
+            offsets,
+            segments,
+        })
+    }
+
+    /// Returns the possible next letters after the given word prefix.
+    pub fn segment(&self, word: &[u32]) -> &[Entry] {
+        let order = self.order;
+        let mut index = 0;
+        for i in 0..order - 1 {
+            let pos = word.len() as isize - order as isize + i as isize + 1;
+            let cp = if pos >= 0 { word[pos as usize] } else { SPACE };
+            match self.index.get(&cp) {
+                Some(&j) => index += j * self.offsets[i + 1],
+                None => return &[],
+            }
+        }
+        &self.segments[index]
+    }
+}
+
 struct Reader<'a> {
     data: &'a [u8],
     pos: usize,
