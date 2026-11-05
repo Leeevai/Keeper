@@ -45,6 +45,55 @@ enum Command {
     Path,
 }
 
+fn print_stats(storage: &Storage) -> Result<()> {
+    let results = storage.load_results()?;
+    let settings: Settings = storage.load_settings();
+    let unit = settings.speed_unit;
+    if results.is_empty() {
+        println!("No lessons yet. Run `keeper` to start practicing.");
+        return Ok(());
+    }
+    let all = SummaryStats::from_results(&results);
+    let today = chrono::Local::now().date_naive();
+    let today_stats =
+        SummaryStats::from_results(results.iter().filter(|r| r.local_date() == today));
+    println!(
+        "All time:  {} lessons in {}",
+        all.count,
+        format_duration(all.time)
+    );
+    println!(
+        "           top speed {}, average {}",
+        unit.format(all.speed.max),
+        unit.format(all.speed.avg)
+    );
+    println!(
+        "           top accuracy {:.1}%, average {:.1}%",
+        all.accuracy.max * 100.0,
+        all.accuracy.avg * 100.0
+    );
+    if today_stats.count > 0 {
+        println!(
+            "Today:     {} lessons in {}",
+            today_stats.count,
+            format_duration(today_stats.time)
+        );
+        println!(
+            "           top speed {}, average {}",
+            unit.format(today_stats.speed.max),
+            unit.format(today_stats.speed.avg)
+        );
+    }
+    for streak in StreakList::find_longest(&results) {
+        println!(
+            "Longest streak at {:.0}% accuracy: {} lessons",
+            streak.level * 100.0,
+            streak.results.len()
+        );
+    }
+    Ok(())
+}
+
 fn main() {
     println!("keeper {}", env!("CARGO_PKG_VERSION"));
 }
