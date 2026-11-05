@@ -337,3 +337,51 @@ impl Generator<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rng::Lcg;
+    use crate::textinput::flatten;
+
+    #[test]
+    fn every_syntax_generates_code() {
+        assert_eq!(Syntax::all().len(), 16);
+        let all_flags: HashSet<String> = FLAGS.iter().map(|s| s.to_string()).collect();
+        for syntax in Syntax::all() {
+            for flags in [HashSet::new(), all_flags.clone()] {
+                let mut rng = Lcg::new(11);
+                for _ in 0..20 {
+                    let text = flatten(&syntax.generate(&flags, &mut rng));
+                    let n = text.chars().count();
+                    assert!(n > 20 && n <= 200, "{}: {n} {text:?}", syntax.id);
+                    assert!(
+                        !text.contains('\n') && !text.contains('\t'),
+                        "{}",
+                        syntax.id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn flags_control_optional_parts() {
+        let python = Syntax::get("python");
+        assert!(python.flags.contains(&"comments"));
+        let comments: HashSet<String> = ["comments".to_string()].into();
+        let mut found = false;
+        let mut rng = Lcg::new(1);
+        for _ in 0..50 {
+            let text = python.generate(&comments, &mut rng);
+            found |= text.iter().any(|s| s.cls == Some(Class::Comment));
+        }
+        assert!(found);
+        let mut rng = Lcg::new(1);
+        for _ in 0..50 {
+            let text = python.generate(&HashSet::new(), &mut rng);
+            assert!(text.iter().all(|s| s.cls != Some(Class::Comment)));
+        }
+        assert_eq!(Syntax::get("nope").id, "html");
+    }
+}
