@@ -342,6 +342,123 @@ enum Kind {
     },
 }
 
+/// Generates the text of lessons and tracks which keys are being learned.
+pub struct Lesson {
+    pub lesson_type: LessonType,
+    pub settings: Settings,
+    pub keyboard: Keyboard,
+    pub code_points: CodePointSet,
+    pub language: &'static Language,
+    model: Arc<PhoneticModel>,
+    letters: Vec<Letter>,
+    kind: Kind,
+}
+
+impl Lesson {
+    pub fn new(settings: &Settings) -> Self {
+        let options = settings.keyboard_options();
+        let keyboard = settings.keyboard();
+        let code_points = keyboard.code_points();
+        let language = options.language;
+        let model = shared_model(language);
+        let model_letters: Vec<Letter> = model
+            .letters
+            .iter()
+            .filter(|l| code_points.has(l.cp))
+            .cloned()
+            .collect();
+        let allowed = |cp: u32| code_points.has(cp);
+        let (letters, kind) = match settings.lesson_type {
+            LessonType::Guided => {
+                let words: Vec<String> = filter_word_list(word_list(&language.id), allowed)
+                    .into_iter()
+                    .filter(|w| w.chars().count() > 2)
+                    .collect();
+                (
+                    model_letters,
+                    Kind::Guided {
+                        dictionary: Dictionary::new(words),
+                    },
+                )
+            }
+            LessonType::Wordlist => {
+                let words = filter_word_list(word_list(&language.id), allowed)
+                    .into_iter()
+                    .filter(|w| !settings.long_words_only || w.chars().count() > 3)
+                    .take(settings.word_list_size as usize)
+                    .collect();
+                (model_letters, Kind::WordList { words })
+            }
+            LessonType::Books => {
+                let book = Book::get(&settings.book);
+                let paragraphs: Vec<String> = book
+                    .paragraphs()
+                    .iter()
+                    .map(|p| {
+                        clean_text(
+                            p,
+                            language,
+                            &code_points,
+                            settings.book_letters_only,
+                            settings.book_lowercase,
+                        )
+                    })
+                    .collect();
+                let start = (settings.paragraph_index as usize).min(paragraphs.len());
+                let words = paragraphs[start..]
+                    .iter()
+                    .chain(&paragraphs[..start])
+                    .flat_map(|p| p.split_whitespace().map(String::from).collect::<Vec<_>>())
+                    .collect();
+                (
+                    model_letters,
+                    Kind::Sequence {
+                        words,
+                        index: 0,
+                        randomize: false,
+                    },
+                )
+            }
+            LessonType::Custom => {
+                let text = clean_text(
+                    &settings.custom_text,
+                    language,
+                    &code_points,
+                    settings.custom_letters_only,
+                    settings.custom_lowercase,
+                );
+                let words = text.split_whitespace().map(String::from).collect();
+                (
+                    model_letters,
+                    Kind::Sequence {
+                        words,
+                        index: 0,
+                        randomize: settings.custom_randomize,
+                    },
+                )
+            }
+            LessonType::Numbers => (Letter::digits(), Kind::Numbers),
+            LessonType::Code => (
+                Letter::programming(),
+                Kind::Code {
+                    syntax: Syntax::get(&settings.code_syntax),
+                    flags: settings.code_flags.iter().cloned().collect(),
+                },
+            ),
+        };
+        Self {
+            lesson_type: settings.lesson_type,
+            settings: settings.clone(),
+            keyboard,
+            code_points,
+            language,
+            model,
+            letters,
+            kind,
+        }
+    }
+}
+
 fn mangle_and_join(
     settings: &Settings,
     language: &Language,
