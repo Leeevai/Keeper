@@ -138,6 +138,280 @@ impl Profile {
             layouts[0].clone()
         }
     }
+
+    /// Renders the whole page into a buffer which is then scrolled.
+    fn page(&self, width: u16, ctx: &RenderContext, results: &[TypingResult]) -> Buffer {
+        let s = ctx.styles;
+        let settings = ctx.settings;
+        let unit = settings.speed_unit;
+        let inner = width.saturating_sub(4);
+
+        // Key statistics for the chosen layout and class of characters.
+        let layout_id = self.selected_layout(results, settings);
+        let layout = KeyboardLayout::get(&layout_id);
+        let keyboard = Keyboard::new(layout, &layout.geometries[0], "standard");
+        let code_points = keyboard.code_points();
+        let model = shared_model(layout.language());
+        let language_letters: Vec<_> = model
+            .letters
+            .iter()
+            .filter(|l| code_points.has(l.cp))
+            .cloned()
+            .collect();
+        let letters =
+            crate::phonetic::Letter::frequency_order(&self.char_class.letters(&language_letters));
+        let layout_results: Vec<&TypingResult> =
+            results.iter().filter(|r| r.layout == layout_id).collect();
+        let key_stats = KeyStatsMap::from_results(&letters, layout_results.iter().copied());
+        let target = Target::new(settings);
+
+        let mut sections: Vec<Section> = Vec::new();
+
+        let all = SummaryStats::from_results(results);
+        let today = Local::now().date_naive();
+        let today_stats =
+            SummaryStats::from_results(results.iter().filter(|r| r.local_date() == today));
+        sections.push((
+            "Statistics".into(),
+            8,
+            Box::new(move |area, buf| {
+                let [left, right] =
+                    Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                        .areas(area);
+                summary(s, unit, "All Time Statistics", &all, None).render(left, buf);
+                let goal = (settings.daily_goal > 0).then_some(ctx.daily_goal);
+                summary(s, unit, "Statistics for Today", &today_stats, goal).render(right, buf);
+            }),
+        ));
+
+        let streaks = StreakList::find_longest(results);
+        let streak_height = if streaks.is_empty() {
+            2
+        } else {
+            streaks.len() as u16 + 1
+        };
+        sections.push((
+            "Accuracy Streaks".into(),
+            streak_height,
+            Box::new(move |area, buf| streak_table(s, unit, &streaks).render(area, buf)),
+        ));
+
+        sections.push((
+            "Relative Typing Speed".into(),
+            12,
+            Box::new(move |area, buf| {
+                let dist = Distribution::speed();
+                let max = dist.len() as f64 - 1.0;
+                let markers = [
+                    (all.speed.avg, s.palette.chart_speed, "average"),
+                    (all.speed.max, s.palette.chart_threshold, "top"),
+                ];
+                histogram(s, area, buf, dist, 0.0, max, &markers, &|i| unit.format(i));
+                let line = |label: &str, value: f64| {
+                    let beats = if value > 0.0 {
+                        format!("{:.1}%", dist.cdf(value) * 100.0)
+                    } else {
+                        "N/A".into()
+                    };
+                    Line::from(vec![
+                        Span::styled(
+                            format!(
+                                "Your all time {label} speed ({}) beats ",
+                                unit.format(value)
+                            ),
+                            s.name,
+                        ),
+                        Span::styled(beats, s.value),
+                        Span::styled(" of all other people.", s.name),
+                    ])
+                };
+                let y = area.y + area.height - 2;
+                Paragraph::new(vec![
+                    line("top", all.speed.max),
+                    line("average", all.speed.avg),
+                ])
+                .render(
+                    Rect {
+                        y,
+                        height: 2,
+                        ..area
+                    },
+                    buf,
+                );
+            }),
+        ));
+
+        sections.push((
+            "Relative Accuracy".into(),
+            12,
+            Box::new(move |area, buf| {
+                let dist = Distribution::accuracy();
+                let scale = dist.len() as f64 - 1.0;
+                let markers = [
+                    (all.accuracy.avg * scale, s.palette.chart_speed, "average"),
+                    (all.accuracy.max * scale, s.palette.chart_threshold, "top"),
+                ];
+                histogram(s, area, buf, dist, scale * 0.75, scale, &markers, &|i| {
+                    format!("{:.0}%", i / scale * 100.0)
+                });
+                let line = |label: &str, value: f64| {
+                    let beats = if value > 0.0 {
+                        format!("{:.1}%", dist.cdf(dist.scale(value)) * 100.0)
+                    } else {
+                        "N/A".into()
+                    };
+                    Line::from(vec![
+                        Span::styled(
+                            format!(
+                                "Your all time {label} accuracy ({:.1}%) beats ",
+                                value * 100.0
+                            ),
+                            s.name,
+                        ),
+                        Span::styled(beats, s.value),
+                        Span::styled(" of all other people.", s.name),
+                    ])
+                };
+                let y = area.y + area.height - 2;
+                Paragraph::new(vec![
+                    line("top", all.accuracy.max),
+                    line("average", all.accuracy.avg),
+                ])
+                .render(
+                    Rect {
+                        y,
+                        height: 2,
+                        ..area
+                    },
+                    buf,
+                );
+            }),
+        ));
+
+        let smoothness = self.smoothness;
+        sections.push((
+            format!("Typing Speed  [ ] smoothness {smoothness:.1}"),
+            30,
+            Box::new(move |area, buf| {
+                speed_charts(s, unit, settings, results, smoothness, area, buf)
+            }),
+        ));
+
+        let selector = format!(
+            "Show statistics for: {} (l), {} (c)",
+            layout.full_name(),
+            self.char_class.name()
+        );
+        sections.push((
+            "Learning Progress Overview".into(),
+            key_stats.iter().count() as u16 + 3,
+            Box::new({
+                let key_stats = &key_stats;
+                let selector = selector.clone();
+                move |area, buf| {
+                    Paragraph::new(Line::from(Span::styled(selector.clone(), s.accent)))
+                        .render(area, buf);
+                    let chart = Rect {
+                        y: area.y + 2,
+                        height: area.height - 2,
+                        ..area
+                    };
+                    overview(s, key_stats, &target, chart, buf);
+                }
+            }),
+        ));
+
+        let keys: Vec<_> = key_stats.iter().collect();
+        let key_index = self.key_index.min(keys.len().saturating_sub(1));
+        let selected = keys.get(key_index).map(|k| (*k).clone());
+        sections.push((
+            format!(
+                "Key Typing Speed: {}  ← →",
+                selected
+                    .as_ref()
+                    .map_or("-".to_string(), |k| k.letter.label.clone())
+            ),
+            14,
+            Box::new(move |area, buf| {
+                key_speed_chart(s, unit, &target, selected.as_ref(), area, buf)
+            }),
+        ));
+
+        sections.push((
+            "Key Typing Speed Histogram".into(),
+            14,
+            Box::new({
+                let key_stats = &key_stats;
+                move |area, buf| key_speed_histogram(s, unit, &target, key_stats, area, buf)
+            }),
+        ));
+
+        sections.push((
+            "Key Frequency Histogram".into(),
+            20,
+            Box::new({
+                let key_stats = &key_stats;
+                move |area, buf| key_frequency(s, key_stats, area, buf)
+            }),
+        ));
+
+        let (kb_w, kb_h) = KeyboardView::size(&keyboard, true);
+        let side_by_side = inner >= kb_w * 2 + 4;
+        let heatmap_height = if side_by_side { kb_h + 2 } else { kb_h * 2 + 4 };
+        sections.push((
+            "Key Frequency Heatmap".into(),
+            heatmap_height,
+            Box::new({
+                let key_stats = &key_stats;
+                let keyboard = &keyboard;
+                move |area, buf| heatmap(s, keyboard, key_stats, side_by_side, area, buf)
+            }),
+        ));
+
+        let days = practice_days(results);
+        sections.push((
+            "Practice Calendar".into(),
+            11,
+            Box::new(move |area, buf| calendar(s, &days, settings.daily_goal, today, area, buf)),
+        ));
+
+        let footer = format!(
+            "Your data is in {}.  Press e to export it as JSON, R to reset statistics.",
+            crate::app::short_path(&ctx.data_dir)
+        );
+        sections.push((
+            "Data".into(),
+            2,
+            Box::new(move |area, buf| {
+                Paragraph::new(Span::styled(footer.clone(), s.name))
+                    .wrap(ratatui::widgets::Wrap { trim: true })
+                    .render(area, buf)
+            }),
+        ));
+
+        let total: u16 = sections.iter().map(|(_, h, _)| h + 3).sum();
+        let mut buf = Buffer::empty(Rect::new(0, 0, width, total));
+        buf.set_style(buf.area, s.base);
+        let mut y = 0;
+        for (title, height, draw) in &sections {
+            let area = Rect::new(0, y, width, height + 2);
+            let block = Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(s.border)
+                .title(Span::styled(format!(" {title} "), s.title));
+            let inner_area = block.inner(area);
+            block.render(area, &mut buf);
+            let inner_area = Rect {
+                x: inner_area.x + 1,
+                width: inner_area.width.saturating_sub(2),
+                ..inner_area
+            };
+            draw(inner_area, &mut buf);
+            y += height + 3;
+        }
+        buf
+    }
 }
 
 /// Layouts that have results, most used first.
