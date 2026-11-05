@@ -276,4 +276,61 @@ mod tests {
         assert!(storage.load_results().unwrap().is_empty());
         assert!(storage.reset_results().unwrap().is_none());
     }
+
+    #[test]
+    fn a_line_of_invalid_utf8_is_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        storage.append_result(&result(1)).unwrap();
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(storage.results_path())
+            .unwrap();
+        f.write_all(b"\xff\xfe\n").unwrap();
+        storage.append_result(&result(2)).unwrap();
+        let loaded = storage.load_results().unwrap();
+        assert_eq!(loaded.len(), 2);
+    }
+
+    #[test]
+    fn a_cut_line_does_not_swallow_the_next_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        storage.append_result(&result(1)).unwrap();
+        // A write that was cut short, by a full disk or a crash.
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(storage.results_path())
+            .unwrap();
+        f.write_all(br#"{"layout":"en-us","textT"#).unwrap();
+        storage.append_result(&result(2)).unwrap();
+        let loaded = storage.load_results().unwrap();
+        assert_eq!(
+            loaded.iter().map(|r| r.time_stamp).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+    }
+
+    #[test]
+    fn export_and_import() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        let file = dir.path().join("export.json");
+        storage
+            .export_results(&[result(1), result(2)], &file)
+            .unwrap();
+        let added = storage.import_results(&[result(1)], &file).unwrap();
+        assert_eq!(added.len(), 1);
+        assert_eq!(storage.load_results().unwrap(), vec![result(2)]);
+        // JSON lines work too.
+        let lines = dir.path().join("lines.jsonl");
+        fs::write(
+            &lines,
+            serde_json::to_string(&result(3).to_record()).unwrap() + "\n",
+        )
+        .unwrap();
+        assert_eq!(storage.import_results(&[], &lines).unwrap().len(), 1);
+        fs::write(&lines, "nope").unwrap();
+        assert!(storage.import_results(&[], &lines).is_err());
+    }
 }
