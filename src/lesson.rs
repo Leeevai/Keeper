@@ -236,3 +236,64 @@ impl WordSource for WordSequence<'_> {
         Some(word)
     }
 }
+
+/// Avoids the same word twice in a row.
+struct UniqueWords<S> {
+    inner: S,
+    last: String,
+}
+
+impl<S: WordSource> WordSource for UniqueWords<S> {
+    fn next(&mut self, rng: &mut dyn Rng) -> Option<String> {
+        let mut word = None;
+        for _ in 0..3 {
+            let w = self.inner.next(rng).filter(|w| !w.is_empty())?;
+            if w != self.last {
+                self.last = w.clone();
+                return Some(w);
+            }
+            word = Some(w);
+        }
+        word
+    }
+}
+
+/// Adds capital letters and punctuation to words.
+struct MangledWords<'a, S> {
+    inner: S,
+    language: &'a Language,
+    punctuators: Vec<Letter>,
+    capitals: f64,
+    punctuation: f64,
+}
+
+impl<S: WordSource> WordSource for MangledWords<'_, S> {
+    fn next(&mut self, rng: &mut dyn Rng) -> Option<String> {
+        let mut word = self.inner.next(rng).filter(|w| !w.is_empty())?;
+        if self.capitals > 0.0 && self.capitals >= rng.next_f64() {
+            word = self.language.capital_case(&word);
+        }
+        if self.punctuation > 0.0
+            && !self.punctuators.is_empty()
+            && self.punctuation >= rng.next_f64()
+        {
+            let p = weighted_random_sample(&self.punctuators, |l| l.f, rng).cp;
+            word = match char::from_u32(p) {
+                Some('!') => format!("{word}!"),
+                Some('"') => format!("\"{word}\""),
+                Some('\'') => format!("'{word}'"),
+                Some(',') => format!("{word},"),
+                Some('-') => match self.inner.next(rng) {
+                    Some(next) => format!("{word}-{next}"),
+                    None => word,
+                },
+                Some('.') => format!("{word}."),
+                Some(':') => format!("{word}:"),
+                Some(';') => format!("{word};"),
+                Some('?') => format!("{word}?"),
+                _ => word,
+            };
+        }
+        Some(word)
+    }
+}
