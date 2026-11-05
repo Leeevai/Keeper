@@ -111,3 +111,64 @@ impl SpeedUnit {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CaretShape {
+    Block,
+    Box,
+    Line,
+    #[default]
+    Underline,
+}
+
+impl CaretShape {
+    pub const ALL: [CaretShape; 4] = [
+        CaretShape::Block,
+        CaretShape::Box,
+        CaretShape::Line,
+        CaretShape::Underline,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            CaretShape::Block => "Block cursor",
+            CaretShape::Box => "Box cursor",
+            CaretShape::Line => "Line cursor",
+            CaretShape::Underline => "Underline cursor",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WhitespaceStyle {
+    Space,
+    Bar,
+    #[default]
+    Bullet,
+}
+
+impl WhitespaceStyle {
+    pub const ALL: [WhitespaceStyle; 3] = [
+        WhitespaceStyle::Space,
+        WhitespaceStyle::Bar,
+        WhitespaceStyle::Bullet,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            WhitespaceStyle::Space => "No whitespace",
+            WhitespaceStyle::Bar => "Bar whitespace",
+            WhitespaceStyle::Bullet => "Bullet whitespace",
+        }
+    }
+
+    pub fn symbol(self) -> char {
+        match self {
+            WhitespaceStyle::Space => ' ',
+            WhitespaceStyle::Bar => '␣',
+            WhitespaceStyle::Bullet => '·',
+        }
+    }
+}
