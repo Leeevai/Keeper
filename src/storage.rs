@@ -33,6 +33,87 @@ pub struct TestResult {
     pub source: String,
 }
 
+pub struct Storage {
+    dir: PathBuf,
+}
+
+impl Storage {
+    /// Uses `dir`, or `$KEEPER_HOME`, or the platform data directory.
+    pub fn open(dir: Option<PathBuf>) -> Result<Self> {
+        let dir = match dir.or_else(|| std::env::var_os("KEEPER_HOME").map(PathBuf::from)) {
+            Some(dir) => dir,
+            None => dirs::data_dir()
+                .context("cannot find the data directory")?
+                .join("keeper"),
+        };
+        fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+        Ok(Self { dir })
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    pub fn settings_path(&self) -> PathBuf {
+        self.dir.join("settings.json")
+    }
+
+    pub fn results_path(&self) -> PathBuf {
+        self.dir.join("results.jsonl")
+    }
+
+    pub fn tests_path(&self) -> PathBuf {
+        self.dir.join("typing-tests.jsonl")
+    }
+
+    /// Loads the settings, or the defaults if there are none. Unreadable
+    /// settings are kept aside in `settings.json.bad`.
+    pub fn load_settings(&self) -> Settings {
+        let path = self.settings_path();
+        match fs::read_to_string(&path) {
+            Ok(text) => match serde_json::from_str::<Settings>(&text) {
+                Ok(settings) => settings.normalize(),
+                Err(_) => {
+                    let _ = fs::rename(&path, path.with_extension("json.bad"));
+                    Settings::default()
+                }
+            },
+            Err(_) => Settings::default(),
+        }
+    }
+
+    pub fn save_settings(&self, settings: &Settings) -> Result<()> {
+        let json = serde_json::to_string_pretty(settings)?;
+        write_atomic(&self.settings_path(), json.as_bytes())
+    }
+
+    /// Loads the lesson results, skipping lines which cannot be parsed.
+    pub fn load_results(&self) -> Result<Vec<TypingResult>> {
+        let mut results: Vec<TypingResult> = read_lines::<ResultRecord>(&self.results_path())?
+            .into_iter()
+            .filter_map(|r| r.into_result().recover())
+            .collect();
+        results.sort_by_key(|r| r.time_stamp);
+        Ok(results)
+    }
+
+    pub fn append_result(&self, result: &TypingResult) -> Result<()> {
+        append_line(&self.results_path(), &result.to_record())
+    }
+
+    /// Moves the results into a timestamped backup file and starts afresh.
+    pub fn reset_results(&self) -> Result<Option<PathBuf>> {
+        let path = self.results_path();
+        if !path.exists() {
+            return Ok(None);
+        }
+        let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+        let backup = self.dir.join(format!("results-{stamp}.jsonl.bak"));
+        fs::rename(&path, &backup)?;
+        Ok(Some(backup))
+    }
+}
+
 fn read_lines<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
     let file = match File::open(path) {
         Ok(file) => file,
