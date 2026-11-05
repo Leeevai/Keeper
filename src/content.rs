@@ -69,3 +69,34 @@ pub fn filter_word_list(words: &[String], allowed: impl Fn(u32) -> bool) -> Vec<
         .cloned()
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn books() {
+        assert_eq!(Book::all().len(), 6);
+        let alice = Book::get("en-alice-wonderland");
+        assert_eq!(alice.author, "Lewis Carroll");
+        assert!(alice.paragraphs()[0].starts_with("Alice was beginning"));
+        assert!(alice.paragraphs().len() > 100);
+        for book in Book::all() {
+            assert!(!book.paragraphs().is_empty(), "{}", book.id);
+        }
+    }
+
+    #[test]
+    fn word_lists() {
+        assert_eq!(&word_list("en")[..3], ["the", "to", "i"]);
+        assert!(word_list("xx").is_empty());
+        let words = filter_word_list(word_list("en"), |cp| {
+            "theoa".contains(char::from_u32(cp).unwrap())
+        });
+        assert!(words.contains(&"the".to_string()));
+        assert!(
+            !words.contains(&"to".to_string())
+                || words.iter().all(|w| w.chars().all(|c| "theoa".contains(c)))
+        );
+    }
+}
