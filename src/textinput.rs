@@ -69,3 +69,34 @@ pub struct Char {
     pub attr: Attr,
     pub cls: Option<Class>,
 }
+
+fn split(text: &StyledText) -> Vec<Char> {
+    text.iter()
+        .flat_map(|span| {
+            span.text.chars().map(move |c| Char {
+                cp: u32::from(c),
+                attr: Attr::Normal,
+                cls: span.cls,
+            })
+        })
+        .collect()
+}
+
+/// A single typed character.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Step {
+    /// Milliseconds since an arbitrary epoch.
+    pub time_stamp: f64,
+    pub cp: u32,
+    /// Milliseconds since the previous key press.
+    pub time_to_type: f64,
+    /// Whether the character was typed after an error.
+    pub typo: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Feedback {
+    Succeeded,
+    Recovered,
+    Failed,
+}
