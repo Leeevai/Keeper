@@ -544,3 +544,98 @@ pub struct Settings {
     #[serde(rename = "typingTest.duration", default)]
     pub test_duration: TestDuration,
 }
+
+impl Default for Settings {
+    fn default() -> Self {
+        serde_json::from_str("{}").expect("defaults")
+    }
+}
+
+/// The resolved keyboard configuration.
+#[derive(Debug, Clone)]
+pub struct KeyboardOptions {
+    pub language: &'static Language,
+    pub layout: &'static Layout,
+    pub geometry: &'static Geometry,
+    pub zones: String,
+}
+
+impl Settings {
+    /// Clamps numbers into their ranges and replaces unknown ids.
+    pub fn normalize(mut self) -> Self {
+        let clamp01 = |v: f64| {
+            if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
+        self.lesson_length = clamp01(self.lesson_length);
+        self.alphabet_size = clamp01(self.alphabet_size);
+        self.capitals = clamp01(self.capitals);
+        self.punctuators = clamp01(self.punctuators);
+        self.sound_volume = clamp01(self.sound_volume);
+        self.word_list_size = self.word_list_size.clamp(10, 1000);
+        self.test_word_list_size = self.test_word_list_size.clamp(10, 1000);
+        self.paragraph_index = self.paragraph_index.min(1000);
+        self.test_paragraph_index = self.test_paragraph_index.min(1000);
+        self.repeat_words = self.repeat_words.clamp(1, 10);
+        self.target_speed = self.target_speed.clamp(75, 750);
+        self.daily_goal = self.daily_goal.min(120);
+        if self.custom_text.chars().count() > 10_000 {
+            self.custom_text = self.custom_text.chars().take(10_000).collect();
+        }
+        if crate::content::Book::find(&self.book).is_none() {
+            self.book = d_book();
+        }
+        if crate::content::Book::find(&self.test_book).is_none() {
+            self.test_book = d_book();
+        }
+        if Language::find(&self.test_language).is_none() {
+            self.test_language = d_language();
+        }
+        if Layout::find(&self.system_layout).is_none() {
+            self.system_layout = d_layout();
+        }
+        if crate::theme::Theme::find(&self.theme).is_none() {
+            self.theme = d_theme();
+        }
+        self.code_flags
+            .retain(|f| crate::code::FLAGS.contains(&f.as_str()));
+        let options = self.keyboard_options();
+        self.language = options.language.id.clone();
+        self.layout = options.layout.id.clone();
+        self.geometry = options.geometry.id.clone();
+        self.zones = options.zones;
+        self
+    }
+
+    /// Resolves the language, layout, geometry and zones the same way as
+    /// keybr.com: each choice must be compatible with the previous ones.
+    pub fn keyboard_options(&self) -> KeyboardOptions {
+        let language = Language::get(&self.language);
+        let mut layout = Layout::select(language);
+        if let Some(l) = Layout::find(&self.layout)
+            && l.language().script == language.script
+        {
+            layout = l;
+        }
+        let geometry_id = if layout.geometries.contains(&self.geometry) {
+            self.geometry.clone()
+        } else {
+            layout.geometries[0].clone()
+        };
+        let geometry = Geometry::get(&geometry_id);
+        let zones = if layout.layout_mod.is_none() && geometry.zones.contains(&self.zones) {
+            self.zones.clone()
+        } else {
+            geometry.zones.first().cloned().unwrap_or_else(d_zones)
+        };
+        KeyboardOptions {
+            language,
+            layout,
+            geometry,
+            zones,
+        }
+    }
+}
