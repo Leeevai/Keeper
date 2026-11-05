@@ -360,3 +360,128 @@ impl PrefixList {
         }
     }
 }
+
+/// A phonetic language model which generates pseudo-words.
+pub struct PhoneticModel {
+    pub language: &'static Language,
+    pub letters: Vec<Letter>,
+    table: TransitionTable,
+    prefixes: PrefixList,
+    blacklist: HashSet<String>,
+}
+
+impl PhoneticModel {
+    pub fn load(language: &'static Language) -> Result<Self> {
+        let data = assets::model_data(&language.id)
+            .ok_or_else(|| anyhow::anyhow!("no phonetic model for language {}", language.id))?;
+        let table = TransitionTable::load(data)?;
+        let letters = table.letters(language);
+        let prefixes = PrefixList::new(&table);
+        let blacklist = assets::blacklist_json(&language.id)
+            .map(|json| {
+                let words: Vec<String> = serde_json::from_str(json).unwrap_or_default();
+                words.iter().map(|w| unscramble_word(w)).collect()
+            })
+            .unwrap_or_default();
+        Ok(Self {
+            language,
+            letters,
+            table,
+            prefixes,
+            blacklist,
+        })
+    }
+
+    pub fn table(&self) -> &TransitionTable {
+        &self.table
+    }
+
+    /// Generates a pseudo-word from the letters allowed by the filter.
+    /// Returns an empty string when no word can be generated.
+    pub fn next_word(&self, filter: &Filter, rng: &mut dyn Rng) -> String {
+        for _ in 0..1000 {
+            let word = from_code_points(&self.next_word_raw(filter, rng));
+            if self.blacklist.is_empty()
+                || !self.blacklist.contains(&self.language.lower_case(&word))
+            {
+                return word;
+            }
+        }
+        String::new()
+    }
+
+    fn next_word_raw(&self, filter: &Filter, rng: &mut dyn Rng) -> Vec<u32> {
+        let prefixes = self.prefixes.find(filter);
+        let mut word: Vec<u32> = Vec::new();
+        let mut attempt = 0;
+        let mut retry = |word: &mut Vec<u32>, rng: &mut dyn Rng| -> bool {
+            if attempt < 5 {
+                attempt += 1;
+                word.clear();
+                if !prefixes.is_empty() {
+                    let (prefix, _) = weighted_random_sample(&prefixes, |(_, w)| *w as f64, rng);
+                    word.extend_from_slice(prefix);
+                }
+                true
+            } else {
+                false
+            }
+        };
+        retry(&mut word, rng);
+        loop {
+            let entries: Vec<(u32, f64)> = self
+                .table
+                .segment(&word)
+                .iter()
+                .filter(|e| {
+                    if e.cp == SPACE {
+                        word.len() >= MIN_LENGTH
+                    } else {
+                        filter.includes(e.cp)
+                    }
+                })
+                .map(|e| {
+                    let f = e.frequency as f64;
+                    // Boost the space character to generate shorter words.
+                    (
+                        e.cp,
+                        if e.cp == SPACE {
+                            f * 1.3f64.powi(word.len() as i32)
+                        } else {
+                            f
+                        },
+                    )
+                })
+                .collect();
+            if entries.is_empty() {
+                if retry(&mut word, rng) {
+                    continue;
+                }
+                return word;
+            }
+            let &(cp, _) = weighted_random_sample(&entries, |e| e.1, rng);
+            if cp == SPACE {
+                return word;
+            }
+            if word.len() > MAX_LENGTH {
+                if retry(&mut word, rng) {
+                    continue;
+                }
+                return word;
+            }
+            word.push(cp);
+        }
+    }
+}
+
+const SCRAMBLE_X: usize = 23;
+const SCRAMBLE_Y: usize = 13;
+
+/// Restores a word from the scrambled blacklist.
+pub fn unscramble_word(word: &str) -> String {
+    let a: Vec<char> = word.chars().collect();
+    let n = a.len();
+    (0..n)
+        .map(|i| a[(SCRAMBLE_X * i + SCRAMBLE_Y) % n])
+        .collect()
+}
