@@ -2,6 +2,7 @@
 
 pub mod practice;
 pub mod profile;
+pub mod settings_view;
 
 use std::time::Instant;
 
