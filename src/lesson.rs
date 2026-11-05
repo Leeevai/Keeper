@@ -297,3 +297,47 @@ impl<S: WordSource> WordSource for MangledWords<'_, S> {
         Some(word)
     }
 }
+
+/// Joins words until the lesson is long enough, repeating each word.
+fn generate_fragment(
+    settings: &Settings,
+    source: &mut dyn WordSource,
+    repeat_words: u32,
+    rng: &mut dyn Rng,
+) -> String {
+    let length = 100 + (settings.lesson_length * 100.0).round() as usize;
+    let mut words: Vec<String> = Vec::new();
+    let mut words_length = 0;
+    loop {
+        let word = source
+            .next(rng)
+            .filter(|w| !w.is_empty())
+            .unwrap_or_else(|| "?".into());
+        for _ in 0..repeat_words.max(1) {
+            words_length += word.chars().count();
+            words.push(word.clone());
+            if words_length >= length {
+                return words.join(" ");
+            }
+        }
+    }
+}
+
+enum Kind {
+    Guided {
+        dictionary: Dictionary,
+    },
+    WordList {
+        words: Vec<String>,
+    },
+    Sequence {
+        words: Vec<String>,
+        index: usize,
+        randomize: bool,
+    },
+    Numbers,
+    Code {
+        syntax: &'static Syntax,
+        flags: HashSet<String>,
+    },
+}
