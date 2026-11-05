@@ -139,6 +139,54 @@ impl Profile {
         }
     }
 
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        ctx: &RenderContext,
+        results: &[TypingResult],
+    ) {
+        let width = area.width.min(WIDTH);
+        let page = self.page(width, ctx, results);
+        let page_height = page.area.height;
+        let visible = area.height;
+        self.page_height.set(page_height.saturating_sub(visible));
+        let scroll = self.scroll.min(page_height.saturating_sub(visible));
+        let x0 = area.x + (area.width - width) / 2;
+        let buf = frame.buffer_mut();
+        for y in 0..visible.min(page_height.saturating_sub(scroll)) {
+            for x in 0..width {
+                if let Some(cell) = buf.cell_mut((x0 + x, area.y + y)) {
+                    *cell = page[(x, y + scroll)].clone();
+                }
+            }
+        }
+        if self.confirm_reset {
+            let dialog = crate::ui::centered(area, 60, 7);
+            frame.render_widget(ratatui::widgets::Clear, dialog);
+            let text = vec![
+                Line::from(""),
+                Line::from(Span::styled("Reset all statistics?", ctx.styles.value)).centered(),
+                Line::from(Span::styled(
+                    "Your results are moved to a backup file in the data folder.",
+                    ctx.styles.name,
+                ))
+                .centered(),
+                Line::from(Span::styled(
+                    "Press y to reset, any other key to cancel.",
+                    ctx.styles.accent,
+                ))
+                .centered(),
+            ];
+            let block = Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(ctx.styles.error)
+                .style(ctx.styles.base);
+            frame.render_widget(Paragraph::new(text).block(block), dialog);
+        }
+    }
+
     /// Renders the whole page into a buffer which is then scrolled.
     fn page(&self, width: u16, ctx: &RenderContext, results: &[TypingResult]) -> Buffer {
         let s = ctx.styles;
