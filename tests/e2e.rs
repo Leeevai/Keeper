@@ -170,3 +170,19 @@ impl Drop for Term {
         let _ = self.child.kill();
     }
 }
+
+const F2: &[u8] = b"\x1bOQ";
+const F3: &[u8] = b"\x1bOR";
+const F4: &[u8] = b"\x1bOS";
+const F5: &[u8] = b"\x1b[15~";
+const TAB: &[u8] = b"\t";
+const ESC: &[u8] = b"\x1b";
+const RIGHT: &[u8] = b"\x1b[C";
+const DOWN: &[u8] = b"\x1b[B";
+const PAGE_DOWN: &[u8] = b"\x1b[6~";
+
+fn lines_of(path: &Path) -> usize {
+    std::fs::read_to_string(path)
+        .map(|s| s.lines().count())
+        .unwrap_or(0)
+}
