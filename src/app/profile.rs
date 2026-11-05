@@ -69,6 +69,61 @@ const WIDTH: u16 = 112;
 /// A titled block of the page: its title, height and how to draw it.
 type Section<'a> = (String, u16, Box<dyn Fn(Rect, &mut Buffer) + 'a>);
 
+impl Profile {
+    pub fn handle_key(
+        &mut self,
+        key: ratatui::crossterm::event::KeyEvent,
+        results: &[TypingResult],
+    ) -> ProfileAction {
+        use ratatui::crossterm::event::KeyCode;
+        if self.confirm_reset {
+            self.confirm_reset = false;
+            return if matches!(key.code, KeyCode::Char('y' | 'Y')) {
+                ProfileAction::Reset
+            } else {
+                ProfileAction::None
+            };
+        }
+        let max_scroll = self.page_height.get();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => return ProfileAction::Back,
+            KeyCode::Down | KeyCode::Char('j') => self.scroll = (self.scroll + 2).min(max_scroll),
+            KeyCode::Up | KeyCode::Char('k') => self.scroll = self.scroll.saturating_sub(2),
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                self.scroll = (self.scroll + 20).min(max_scroll)
+            }
+            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(20),
+            KeyCode::Home | KeyCode::Char('g') => self.scroll = 0,
+            KeyCode::End | KeyCode::Char('G') => self.scroll = max_scroll,
+            KeyCode::Left => self.key_index = self.key_index.saturating_sub(1),
+            KeyCode::Right => self.key_index += 1,
+            KeyCode::Char('c') => {
+                self.char_class = self.char_class.next();
+                self.key_index = 0;
+            }
+            KeyCode::Char('l') => {
+                let layouts = layouts_in(results);
+                if !layouts.is_empty() {
+                    let current = self
+                        .layout
+                        .as_ref()
+                        .and_then(|l| layouts.iter().position(|x| x == l));
+                    self.layout =
+                        Some(layouts[current.map_or(0, |i| (i + 1) % layouts.len())].clone());
+                    self.key_index = 0;
+                }
+            }
+            KeyCode::Char('[') => self.smoothness = ((self.smoothness - 0.1) * 10.0).round() / 10.0,
+            KeyCode::Char(']') => self.smoothness = ((self.smoothness + 0.1) * 10.0).round() / 10.0,
+            KeyCode::Char('e') => return ProfileAction::Export,
+            KeyCode::Char('R') => self.confirm_reset = true,
+            _ => {}
+        }
+        self.smoothness = self.smoothness.clamp(0.0, 1.0);
+        ProfileAction::None
+    }
+}
+
 /// Layouts that have results, most used first.
 fn layouts_in(results: &[TypingResult]) -> Vec<String> {
     let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -700,4 +755,106 @@ fn heatmap(
             buf,
         );
     }
+}
+
+fn calendar(
+    s: &Styles,
+    days: &std::collections::BTreeMap<NaiveDate, u64>,
+    goal: u32,
+    today: NaiveDate,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let weeks = ((area.width.saturating_sub(4)) / 2).min(53) as i64;
+    let last_week = week_start(today);
+    let first_week = last_week - Duration::weeks(weeks - 1);
+    let goal_ms = (goal.max(1) as f64) * 60_000.0;
+    let base = if s.themed {
+        s.palette.panel
+    } else {
+        Rgb(60, 60, 60)
+    };
+    let full = s.palette.fast_key;
+    let x0 = area.x + 4;
+    // Month labels.
+    let mut last_month = 0;
+    for w in 0..weeks {
+        let date = first_week + Duration::weeks(w);
+        if date.month() != last_month {
+            last_month = date.month();
+            buf.set_string(
+                x0 + (w * 2) as u16,
+                area.y,
+                date.format("%b").to_string(),
+                s.name,
+            );
+        }
+    }
+    for (i, name) in ["Mon", "", "Wed", "", "Fri", "", "Sun"].iter().enumerate() {
+        buf.set_string(area.x, area.y + 1 + i as u16, name, s.name);
+    }
+    let mut active_days = 0;
+    let mut total = 0;
+    for w in 0..weeks {
+        for d in 0..7 {
+            let date = first_week + Duration::weeks(w) + Duration::days(d);
+            if date > today {
+                continue;
+            }
+            let time = days.get(&date).copied().unwrap_or(0);
+            let style = if time > 0 {
+                active_days += 1;
+                total += time;
+                let t = (time as f64 / goal_ms).clamp(0.0, 1.0);
+                Style::new().fg(s.color(base.lerp(full, 0.3 + 0.7 * t)))
+            } else {
+                Style::new().fg(s.color(base))
+            };
+            let symbol = if date == today { "◆" } else { "■" };
+            buf.set_string(x0 + (w * 2) as u16, area.y + 1 + d as u16, symbol, style);
+        }
+    }
+    let streak = current_streak(days, today);
+    let text = format!(
+        "{} active days, {} in the last {} weeks.  Current streak: {} day{}.",
+        active_days,
+        format_duration(total),
+        weeks,
+        streak,
+        if streak == 1 { "" } else { "s" }
+    );
+    buf.set_string(area.x, area.y + 9, text, s.name);
+    let mut x = area.x + area.width.saturating_sub(24);
+    buf.set_string(x, area.y + 10, "Less ", s.name);
+    x += 5;
+    for t in [0.0, 0.3, 0.6, 1.0] {
+        let color = if t == 0.0 {
+            base
+        } else {
+            base.lerp(full, 0.3 + 0.7 * t)
+        };
+        buf.set_string(x, area.y + 10, "■ ", Style::new().fg(s.color(color)));
+        x += 2;
+    }
+    buf.set_string(x, area.y + 10, "More", s.name);
+}
+
+/// Consecutive days with practice, up to today or yesterday.
+pub fn current_streak(days: &std::collections::BTreeMap<NaiveDate, u64>, today: NaiveDate) -> u32 {
+    let active: BTreeSet<NaiveDate> = days
+        .iter()
+        .filter(|(_, t)| **t > 0)
+        .map(|(d, _)| *d)
+        .collect();
+    let mut day = if active.contains(&today) {
+        today
+    } else {
+        today - Duration::days(1)
+    };
+    let mut n = 0;
+    while active.contains(&day) {
+        n += 1;
+        day -= Duration::days(1);
+    }
+    n
 }
