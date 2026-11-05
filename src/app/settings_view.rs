@@ -259,6 +259,114 @@ impl Field {
             TestParagraph => "Start at paragraph".into(),
         }
     }
+
+    pub fn value(self, s: &Settings) -> String {
+        use Field::*;
+        let options = s.keyboard_options();
+        match self {
+            LessonType => s.lesson_type.name().into(),
+            NaturalWords => on_off(s.natural_words),
+            KeyboardOrder => on_off(s.keyboard_order),
+            AlphabetSize => {
+                let keyboard = s.keyboard();
+                let cps = keyboard.code_points();
+                let letters = shared_model(options.language)
+                    .letters
+                    .iter()
+                    .filter(|l| cps.has(l.cp))
+                    .count();
+                let extra = ((letters.saturating_sub(6)) as f64 * s.alphabet_size).round();
+                format!(
+                    "{} ({} letters)",
+                    percent(s.alphabet_size),
+                    6 + extra as usize
+                )
+            }
+            RecoverKeys => {
+                if s.recover_keys {
+                    "all keys are fast".into()
+                } else {
+                    "the focused key is fast".into()
+                }
+            }
+            WordListSize => format!("{} words", s.word_list_size),
+            LongWordsOnly => on_off(s.long_words_only),
+            Book => book_name(&s.book),
+            ParagraphIndex => format!("{}", s.paragraph_index + 1),
+            BookLettersOnly => on_off(s.book_letters_only),
+            BookLowercase => on_off(s.book_lowercase),
+            CustomText => {
+                let preview: String = s.custom_text.chars().take(28).collect();
+                let more = if s.custom_text.chars().count() > 28 {
+                    "…"
+                } else {
+                    ""
+                };
+                format!("“{}{more}” (Enter to edit)", preview.replace('\n', " "))
+            }
+            CustomLettersOnly => on_off(s.custom_letters_only),
+            CustomLowercase => on_off(s.custom_lowercase),
+            CustomRandomize => on_off(s.custom_randomize),
+            CodeSyntax => Syntax::get(&s.code_syntax).name.clone(),
+            CodeFlag(i) => on_off(s.code_flags.iter().any(|f| f == FLAGS[i])),
+            Benford => on_off(s.benford),
+            Capitals => percent(s.capitals),
+            Punctuators => percent(s.punctuators),
+            RepeatWords => format!("{}×", s.repeat_words),
+            LessonLength => format!("+{} characters", (s.lesson_length * 100.0).round()),
+            TargetSpeed => s.speed_unit.format(s.target_speed as f64),
+            DailyGoal => {
+                if s.daily_goal == 0 {
+                    "Not set".into()
+                } else {
+                    format!("{} minutes", s.daily_goal)
+                }
+            }
+            StopOnError => on_off(s.stop_on_error),
+            ForgiveErrors => on_off(s.forgive_errors),
+            SpaceSkipsWords => on_off(s.space_skips_words),
+            CaretShape => s.caret_shape.name().into(),
+            Whitespace => s.whitespace_style.name().into(),
+            PlaySounds => s.play_sounds.name().into(),
+            SoundTheme => s.sound_theme.name().into(),
+            SoundVolume => percent(s.sound_volume),
+            Language => options.language.name.clone(),
+            Layout => options.layout.name.clone(),
+            Geometry => options.geometry.name.clone(),
+            Zones => {
+                if options.layout.layout_mod.is_some() {
+                    "set by the layout".into()
+                } else {
+                    zone_mods()
+                        .iter()
+                        .find(|(id, _)| *id == options.zones)
+                        .map_or(options.zones.clone(), |(_, n)| n.to_string())
+                }
+            }
+            Emulation => {
+                if options.layout.emulate {
+                    s.emulation.name().into()
+                } else {
+                    format!("{} (not needed for this layout)", s.emulation.name())
+                }
+            }
+            SystemLayout => KeyboardLayout::get(&s.system_layout).full_name(),
+            KeyboardColors => on_off(s.keyboard_colors),
+            KeyboardPointers => on_off(s.keyboard_pointers),
+            SpeedUnit => s.speed_unit.name().into(),
+            Theme => crate::theme::Theme::get(&s.theme).name.into(),
+            ColorMode => s.color_mode.name().into(),
+            View => s.view.name().into(),
+            TestDuration => s.test_duration.name().into(),
+            TestSource => s.test_source.name().into(),
+            TestLanguage => crate::language::Language::get(&s.test_language)
+                .name
+                .clone(),
+            TestWordListSize => format!("{} words", s.test_word_list_size),
+            TestBook => book_name(&s.test_book),
+            TestParagraph => format!("{}", s.test_paragraph_index + 1),
+        }
+    }
 }
 
 /// The number of lines a text takes when wrapped at word boundaries.
