@@ -364,3 +364,51 @@ impl Metric {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SummaryStats {
+    pub count: usize,
+    /// Total milliseconds.
+    pub time: u64,
+    pub speed: Metric,
+    pub accuracy: Metric,
+    pub score: Metric,
+}
+
+impl SummaryStats {
+    pub fn from_results<'a>(results: impl IntoIterator<Item = &'a TypingResult>) -> Self {
+        let mut stats = Self::default();
+        for result in results {
+            stats.append(result);
+        }
+        stats
+    }
+
+    pub fn append(&mut self, result: &TypingResult) {
+        self.count += 1;
+        self.time += result.time as u64;
+        self.speed.append(result.speed);
+        self.accuracy.append(result.accuracy);
+        self.score.append(result.score);
+    }
+}
+
+/// A lesson in an accuracy streak.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StreakItem {
+    pub time_stamp: i64,
+    pub speed: f64,
+    pub length: u32,
+    pub accuracy: f64,
+}
+
+impl From<&TypingResult> for StreakItem {
+    fn from(r: &TypingResult) -> Self {
+        Self {
+            time_stamp: r.time_stamp,
+            speed: r.speed,
+            length: r.length,
+            accuracy: r.accuracy,
+        }
+    }
+}
