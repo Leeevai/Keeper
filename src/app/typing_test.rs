@@ -249,6 +249,133 @@ impl TypingTest {
         });
     }
 
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        ctx: &RenderContext,
+        history: &[TestResult],
+    ) {
+        let s = ctx.styles;
+        let settings = ctx.settings;
+        let width = (NUM_COLS as u16 + 6).min(area.width);
+        let source = match settings.test_source {
+            TestSource::Book => Book::get(&settings.test_book).title.clone(),
+            TestSource::CommonWords => format!(
+                "{} in {}",
+                if settings.test_word_list_size >= 1000 {
+                    "common words".to_string()
+                } else {
+                    format!("top {} words", settings.test_word_list_size)
+                },
+                Language::get(&settings.test_language).name
+            ),
+            TestSource::PseudoWords => format!(
+                "pseudo words in {}",
+                Language::get(&settings.test_language).name
+            ),
+        };
+        let toolbar = Line::from(vec![
+            Span::styled("Test: ", s.name),
+            Span::styled(settings.test_duration.name(), s.value),
+            Span::styled(" (Ctrl+D)  ", s.dim),
+            Span::styled("Text: ", s.name),
+            Span::styled(source, s.value),
+            Span::styled(" (Ctrl+T)", s.dim),
+        ])
+        .centered();
+        let [bar, _, status, body] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
+        frame.render_widget(Paragraph::new(toolbar), bar);
+
+        if let Some(report) = &self.report {
+            self.render_report(frame, body, ctx, report, history);
+            return;
+        }
+
+        let now = ctx.now;
+        let steps = self.all_steps();
+        let status_line = if steps.is_empty() {
+            Line::from(Span::styled("Start typing to begin the test.", s.accent))
+        } else {
+            let elapsed = self.elapsed(now);
+            let speed = compute_speed(steps.len(), elapsed);
+            let left = match (self.duration.time(), self.duration.length()) {
+                (Some(ms), _) => format!("{:.0}s left", ((ms - elapsed) / 1000.0).max(0.0).ceil()),
+                (_, Some(chars)) => format!("{}/{} characters", steps.len(), chars),
+                _ => String::new(),
+            };
+            let (full, empty) = crate::ui::bar(self.progress(now), 30);
+            Line::from(vec![
+                Span::styled(format!("{left}  "), s.value),
+                Span::styled(full, s.accent),
+                Span::styled(empty, s.dim),
+                Span::styled(format!("  {}", settings.speed_unit.format(speed)), s.value),
+            ])
+        };
+        frame.render_widget(Paragraph::new(status_line.centered()), status);
+
+        // A third of the way down, like a page.
+        let box_height = NUM_LINES as u16 + 2;
+        let top = body.y + 1 + body.height.saturating_sub(box_height + 1) / 3;
+        let box_area = crate::ui::centered(
+            Rect {
+                y: top,
+                height: box_height.min(body.height),
+                ..body
+            },
+            width,
+            box_height,
+        );
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(s.border);
+        let inner = block.inner(box_area);
+        frame.render_widget(block, box_area);
+        let inner = Rect {
+            x: inner.x + 2,
+            width: inner.width.saturating_sub(4),
+            ..inner
+        };
+        for (i, line) in self.lines.iter().enumerate() {
+            let chars: Vec<Char> = if i == self.active {
+                self.input.output()
+            } else if let Some(typed) = &self.typed[i] {
+                typed.clone()
+            } else {
+                plain_chars(line)
+            };
+            let view = TextView {
+                chars: &chars,
+                styles: s,
+                whitespace: settings.whitespace_style,
+                caret: settings.caret_shape,
+                rtl: false,
+                typo: i == self.active && self.input.has_typo(),
+            };
+            let row = Rect {
+                y: inner.y + i as u16,
+                height: 1,
+                ..inner
+            };
+            // Lines do not wrap; the active one scrolls to keep the cursor
+            // in view when the terminal is narrow.
+            if row.y < inner.y + inner.height
+                && let Some(pos) = view.render_line(row, frame.buffer_mut(), i == self.active)
+                && settings.caret_shape == crate::settings::CaretShape::Line
+                && i == self.active
+            {
+                frame.set_cursor_position(pos);
+            }
+        }
+    }
+
     fn render_report(
         &self,
         frame: &mut Frame,
