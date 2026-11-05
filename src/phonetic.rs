@@ -83,4 +83,79 @@ impl Letter {
             .map(|c| Letter::new(u32::from(c), 1.0))
             .collect()
     }
+
+    /// Characters of programming languages; paired characters have their
+    /// frequencies halved as they are used in pairs.
+    pub fn programming() -> Vec<Letter> {
+        [
+            ('(', 2.5),
+            (')', 2.4),
+            ('{', 1.8),
+            ('}', 1.7),
+            ('"', 1.7),
+            ('\'', 1.7),
+            (',', 1.6),
+            (';', 1.5),
+            ('[', 1.5),
+            (']', 1.5),
+            (':', 1.4),
+            ('.', 1.3),
+            ('=', 1.2),
+            ('+', 1.1),
+            ('-', 1.0),
+            ('*', 0.9),
+            ('/', 0.8),
+            ('%', 0.7),
+            ('|', 0.6),
+            ('&', 0.5),
+            ('!', 0.4),
+            ('?', 0.3),
+            ('<', 0.2),
+            ('>', 0.1),
+            ('_', 0.1),
+            ('#', 0.1),
+            ('@', 0.1),
+            ('$', 0.1),
+            ('^', 0.1),
+            ('~', 0.1),
+            ('\\', 0.1),
+            ('`', 0.1),
+        ]
+        .into_iter()
+        .map(|(c, f)| Letter::new(u32::from(c), f))
+        .collect()
+    }
+
+    /// Sorts letters by decreasing frequency.
+    pub fn frequency_order(letters: &[Letter]) -> Vec<Letter> {
+        let mut v = letters.to_vec();
+        v.sort_by(|a, b| b.f.total_cmp(&a.f).then(a.cp.cmp(&b.cp)));
+        v
+    }
+
+    /// Sorts letters by weight first, then by decreasing frequency.
+    pub fn weighted_frequency_order(
+        letters: &[Letter],
+        weight: impl Fn(&Letter) -> u32,
+    ) -> Vec<Letter> {
+        let mut v = letters.to_vec();
+        v.sort_by(|a, b| {
+            weight(a)
+                .cmp(&weight(b))
+                .then(b.f.total_cmp(&a.f))
+                .then(a.cp.cmp(&b.cp))
+        });
+        v
+    }
+
+    pub fn normalize(letters: Vec<Letter>) -> Vec<Letter> {
+        let sum: f64 = letters.iter().map(|l| l.f).sum();
+        letters
+            .into_iter()
+            .map(|l| Letter {
+                f: if sum > 0.0 { l.f / sum } else { 0.0 },
+                ..l
+            })
+            .collect()
+    }
 }
