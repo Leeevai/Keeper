@@ -387,3 +387,80 @@ impl TextInput {
         true
     }
 }
+
+/// Typing statistics for a single code point.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sample {
+    #[serde(rename = "codePoint")]
+    pub cp: u32,
+    pub hit_count: u32,
+    pub miss_count: u32,
+    /// Average milliseconds to type the character, zero if unknown.
+    pub time_to_type: u32,
+}
+
+impl Sample {
+    pub fn is_valid(&self) -> bool {
+        // Faster than 1500 CPM or slower than 5 CPM is noise.
+        self.time_to_type == 0 || (40..=12000).contains(&self.time_to_type)
+    }
+}
+
+/// Per-character statistics of a lesson.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Histogram {
+    samples: BTreeMap<u32, Sample>,
+}
+
+impl Histogram {
+    pub fn new(samples: impl IntoIterator<Item = Sample>) -> Self {
+        Self {
+            samples: samples.into_iter().map(|s| (s.cp, s)).collect(),
+        }
+    }
+
+    pub fn from_steps(steps: &[Step]) -> Self {
+        #[derive(Default)]
+        struct Acc {
+            hit: u32,
+            miss: u32,
+            time: f64,
+            count: u32,
+        }
+        let mut map: BTreeMap<u32, Acc> = BTreeMap::new();
+        for step in steps {
+            let acc = map.entry(step.cp).or_default();
+            acc.hit += 1;
+            if step.typo {
+                acc.miss += 1;
+            } else if step.time_to_type > 0.0 {
+                acc.time += step.time_to_type;
+                acc.count += 1;
+            }
+        }
+        Self::new(
+            map.into_iter()
+                .map(|(cp, a)| Sample {
+                    cp,
+                    hit_count: a.hit,
+                    miss_count: a.miss,
+                    time_to_type: if a.time > 0.0 && a.count > 0 {
+                        (a.time / a.count as f64).round() as u32
+                    } else {
+                        0
+                    },
+                })
+                .filter(Sample::is_valid),
+        )
+    }
+
+    /// The number of distinct characters.
+    pub fn complexity(&self) -> usize {
+        self.samples.len()
+    }
+
+    pub fn get(&self, cp: u32) -> Option<&Sample> {
+        self.samples.get(&cp)
+    }
+}
