@@ -181,4 +181,178 @@ impl Practice {
         set.insert(0x20);
         set
     }
+
+    fn indicators(&self, ctx: &RenderContext, width: u16) -> Vec<Line<'static>> {
+        let s = ctx.styles;
+        let unit = ctx.settings.speed_unit;
+        let label = |name: &str| Span::styled(format!("{name:<13}"), s.name);
+        let mut lines = Vec::new();
+
+        let mut metrics = vec![label("Metrics:")];
+        if self.summary.count == 0 {
+            metrics.push(Span::styled("No lessons yet, start typing.", s.name));
+        } else {
+            let m = &self.summary;
+            metrics.extend(name_value(s, "Speed", unit.format(m.speed.last)));
+            metrics.push(Span::styled(
+                format!(" ({})", signed(m.speed.delta, unit.format(m.speed.delta))),
+                s.delta(m.speed.delta),
+            ));
+            metrics.push(Span::raw("   "));
+            metrics.extend(name_value(
+                s,
+                "Accuracy",
+                format!("{:.1}%", m.accuracy.last * 100.0),
+            ));
+            let d = m.accuracy.delta * 100.0;
+            metrics.push(Span::styled(
+                format!(" ({}%)", signed(d, format!("{d:.1}"))),
+                s.delta(d),
+            ));
+            metrics.push(Span::raw("   "));
+            metrics.extend(name_value(s, "Score", crate::ui::thousands(m.score.last)));
+            let d = m.score.delta;
+            metrics.push(Span::styled(
+                format!(" ({})", signed(d, crate::ui::thousands(d))),
+                s.delta(d),
+            ));
+        }
+        lines.push(Line::from(metrics));
+
+        // All keys, colored by confidence; may take several lines.
+        let mut row = vec![label("All keys:")];
+        let mut used = 13usize;
+        for key in self.lesson_keys.iter() {
+            let label_width = unicode_width::UnicodeWidthStr::width(key.letter.label.as_str()) + 1;
+            if used + label_width > width.saturating_sub(4) as usize {
+                lines.push(Line::from(std::mem::take(&mut row)));
+                row.push(Span::raw(" ".repeat(13)));
+                used = 13;
+            }
+            let mut style = key_style(s, key.is_included, key.best_confidence.or(key.confidence));
+            if key.is_focused {
+                style =
+                    style.add_modifier(Modifier::REVERSED | Modifier::BOLD | Modifier::UNDERLINED);
+            }
+            if key.is_forced {
+                style = style.add_modifier(Modifier::ITALIC);
+            }
+            row.push(Span::styled(key.letter.label.clone(), style));
+            row.push(Span::raw(" "));
+            used += label_width;
+        }
+        lines.push(Line::from(row));
+
+        let mut current = vec![label("Current key:")];
+        match self.lesson_keys.focused() {
+            Some(key) => {
+                current.push(Span::styled(
+                    format!("{} ", key.letter.label),
+                    s.value.add_modifier(Modifier::UNDERLINED),
+                ));
+                match (
+                    key.time_to_type,
+                    key.best_time_to_type,
+                    key.confidence,
+                    key.best_confidence,
+                ) {
+                    (Some(t), Some(b), Some(c), Some(bc)) => {
+                        current.push(Span::raw(" "));
+                        current.extend(name_value(
+                            s,
+                            "Last speed",
+                            format!("{} ({:.0}%)", unit.format(time_to_speed(t)), c * 100.0),
+                        ));
+                        current.push(Span::raw("  "));
+                        current.extend(name_value(
+                            s,
+                            "Top speed",
+                            format!("{} ({:.0}%)", unit.format(time_to_speed(b)), bc * 100.0),
+                        ));
+                        let target = Target::new(ctx.settings);
+                        let rate = LearningRate::from(&key.samples, &target);
+                        current.push(Span::raw("  "));
+                        current.push(Span::styled("Learning rate: ", s.name));
+                        match rate {
+                            Some(lr) => {
+                                let v = lr.learning_rate;
+                                // keybr.com shows one to three faces at 0, 5 and 10 CPM per lesson.
+                                let arrows = match v {
+                                    v if v >= 10.0 => "▲▲▲",
+                                    v if v >= 5.0 => "▲▲",
+                                    v if v > 0.0 => "▲",
+                                    v if v <= -10.0 => "▼▼▼",
+                                    v if v <= -5.0 => "▼▼",
+                                    v if v < 0.0 => "▼",
+                                    _ => "",
+                                };
+                                current.push(Span::styled(
+                                    format!("{}/lesson {arrows}", signed(v, unit.format(v))),
+                                    s.delta(v),
+                                ));
+                                if let Some(n) = lr.remaining_lessons {
+                                    current.push(Span::styled(
+                                        format!("  ~{n} lessons to go"),
+                                        s.name,
+                                    ));
+                                }
+                            }
+                            None => current.push(Span::styled("need more data", s.name)),
+                        }
+                    }
+                    _ => current.push(Span::styled(
+                        " Not calibrated, keep typing to measure this key.",
+                        s.name,
+                    )),
+                }
+            }
+            None => current.push(Span::styled("All keys are unlocked.", s.name)),
+        }
+        lines.push(Line::from(current));
+
+        if ctx.settings.view == View::Normal || ctx.settings.view == View::Compact {
+            let mut streaks = vec![label("Streaks:")];
+            let active: Vec<_> = self
+                .streaks
+                .streaks()
+                .into_iter()
+                .filter(|st| !st.results.is_empty())
+                .collect();
+            if active.is_empty() {
+                streaks.push(Span::styled("No accuracy streaks.", s.name));
+            }
+            for (i, streak) in active.iter().enumerate() {
+                if i > 0 {
+                    streaks.push(Span::raw(" "));
+                }
+                let n = streak.results.len();
+                let lessons = if n == 1 {
+                    "One lesson".to_string()
+                } else {
+                    format!("{n} lessons")
+                };
+                streaks.push(Span::styled(format!("{lessons} with "), s.name));
+                streaks.push(Span::styled(
+                    format!("{:.0}%", streak.level * 100.0),
+                    s.value,
+                ));
+                streaks.push(Span::styled(" accuracy.", s.name));
+            }
+            lines.push(Line::from(streaks));
+
+            if ctx.daily_goal.goal > 0 {
+                let goal: &DailyGoal = &ctx.daily_goal;
+                let (full, empty) = bar(goal.value, 20);
+                let done = if goal.value >= 1.0 { s.more } else { s.accent };
+                lines.push(Line::from(vec![
+                    label("Daily goal:"),
+                    Span::styled(format!("{:.0}%", goal.value * 100.0), s.value),
+                    Span::styled(format!("/{} minutes  ", goal.goal), s.name),
+                    Span::styled(full, done),
+                    Span::styled(empty, s.dim),
+                ]));
+            }
+        }
+        lines
+    }
 }
