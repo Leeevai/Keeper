@@ -232,3 +232,83 @@ pub fn practice_days(results: &[TypingResult]) -> BTreeMap<NaiveDate, u64> {
 pub fn week_start(date: NaiveDate) -> NaiveDate {
     date - Duration::days(date.weekday().num_days_from_monday() as i64)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::{KeyStatsMap, TextType};
+    use crate::textinput::{Histogram, Sample};
+
+    #[test]
+    fn distributions() {
+        let speed = Distribution::speed();
+        assert_eq!(speed.len(), 751);
+        assert!((speed.cdf(10_000.0) - 1.0).abs() < 1e-9);
+        assert_eq!(speed.cdf(-1.0), 0.0);
+        let total: f64 = (0..speed.len()).map(|i| speed.pmf(i as f64)).sum();
+        assert!((total - 1.0).abs() < 1e-9);
+        // Typing 40 WPM beats fewer people than typing 80 WPM.
+        assert!(speed.cdf(200.0) < speed.cdf(400.0));
+        assert!(speed.cdf(200.0) > 0.1 && speed.cdf(400.0) < 1.0);
+        let accuracy = Distribution::accuracy();
+        assert_eq!(accuracy.len(), 1001);
+        assert_eq!(accuracy.scale(0.5), 500.0);
+        assert!(accuracy.cdf(accuracy.scale(0.95)) < accuracy.cdf(accuracy.scale(0.99)));
+    }
+
+    #[test]
+    fn smoothing() {
+        assert_eq!(smooth(&[0.0, 3.0, 0.0], 1), vec![1.5, 1.0, 1.5]);
+        assert_eq!(
+            bucketize(&[1.0, 3.0, 5.0, 7.0], 2),
+            vec![2.0, 2.0, 6.0, 6.0]
+        );
+        assert_eq!(smooth_series([1.0, 3.0], 0.0), vec![1.0, 3.0]);
+        let smoothed = smooth_series([0.0, 10.0], 1.0);
+        assert!(smoothed[1] < 0.1);
+    }
+
+    fn result(index: i64, samples: &[(char, u32, u32, u32)]) -> TypingResult {
+        let histogram = Histogram::new(samples.iter().map(|&(c, hit, miss, ttt)| Sample {
+            cp: u32::from(c),
+            hit_count: hit,
+            miss_count: miss,
+            time_to_type: ttt,
+        }));
+        TypingResult::new(
+            "en-us",
+            TextType::Generated,
+            index,
+            100,
+            20_000,
+            0,
+            histogram,
+        )
+    }
+
+    #[test]
+    fn usage_and_overview() {
+        let letters = vec![
+            Letter::new(u32::from('a'), 1.0),
+            Letter::new(u32::from('b'), 1.0),
+        ];
+        let results = vec![
+            result(0, &[('a', 10, 2, 300)]),
+            result(1, &[('a', 5, 0, 200), ('b', 4, 1, 400)]),
+        ];
+        let stats = KeyStatsMap::from_results(&letters, &results);
+        let usage = key_usage(&stats);
+        assert_eq!((usage[0].hits, usage[0].misses), (15, 2));
+        assert!((usage[0].ratio.unwrap() - 2.0 / 15.0).abs() < 1e-9);
+        assert_eq!((usage[1].hits, usage[1].misses), (4, 1));
+        let target = Target {
+            target_speed: 200.0,
+        };
+        let overview = progress_overview(&stats, &target, 4);
+        assert_eq!(overview[0].1.len(), 4);
+        assert!((overview[0].1[0].unwrap() - 1.0).abs() < 1e-9);
+        assert!((overview[0].1[3].unwrap() - 1.5).abs() < 1e-9);
+        assert_eq!(overview[1].1[0], None);
+        assert!(overview[1].1[3].is_some());
+    }
+}
