@@ -333,4 +333,22 @@ mod tests {
         fs::write(&lines, "nope").unwrap();
         assert!(storage.import_results(&[], &lines).is_err());
     }
+
+    #[test]
+    fn typing_tests() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(Some(dir.path().to_path_buf())).unwrap();
+        let test = TestResult {
+            time_stamp: 1,
+            speed: 300.0,
+            accuracy: 0.97,
+            length: 75,
+            time: 15_000,
+            errors: 2,
+            duration: "seconds15".into(),
+            source: "commonWords".into(),
+        };
+        storage.append_test(&test).unwrap();
+        assert_eq!(storage.load_tests().unwrap(), vec![test]);
+    }
 }
