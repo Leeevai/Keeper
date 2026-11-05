@@ -80,3 +80,71 @@ fn tables() -> &'static NormalizeTables {
         NormalizeTables { expand, replace }
     })
 }
+
+/// Maps typographic variants of a character, such as curly quotes,
+/// to the character found on a keyboard.
+pub fn normalize_cp(cp: u32) -> u32 {
+    tables().replace.get(&cp).copied().unwrap_or(cp)
+}
+
+/// Removes characters that are not in the given set from the text,
+/// replacing accented letters with their plain variants when possible,
+/// and collapses whitespace.
+pub fn filter_text(text: &str, allowed: impl Fn(u32) -> bool) -> String {
+    let tables = tables();
+    let mut result = String::new();
+    let mut ws: Option<char> = None;
+
+    fn append(result: &mut String, ws: &mut Option<char>, ch: char) {
+        if let Some(w) = ws.take() {
+            result.push(w);
+        }
+        result.push(ch);
+    }
+    fn space(result: &str, ws: &mut Option<char>, ch: char) {
+        if !result.is_empty() && *ws != Some('\n') {
+            *ws = Some(ch);
+        }
+    }
+
+    for ch in text.nfc() {
+        let cp = u32::from(ch);
+        if is_linebreak(cp) {
+            space(&result, &mut ws, '\n');
+            continue;
+        }
+        if is_whitespace(cp) || is_control(cp) {
+            space(&result, &mut ws, ' ');
+            continue;
+        }
+        if is_diacritic(cp) {
+            continue;
+        }
+        if allowed(cp) {
+            append(&mut result, &mut ws, ch);
+            continue;
+        }
+        if let Some(letters) = tables.expand.get(&cp) {
+            for &letter in letters {
+                if allowed(letter)
+                    && let Some(c) = char::from_u32(letter)
+                {
+                    append(&mut result, &mut ws, c);
+                }
+            }
+            continue;
+        }
+        if let Some(&replacement) = tables.replace.get(&cp) {
+            if allowed(replacement) {
+                // Keep the original typographic character, it will be
+                // accepted as the replacement while typing.
+                append(&mut result, &mut ws, ch);
+            } else {
+                space(&result, &mut ws, ' ');
+            }
+            continue;
+        }
+        space(&result, &mut ws, ' ');
+    }
+    result
+}
