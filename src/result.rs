@@ -590,3 +590,60 @@ impl DailyGoal {
         }
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    pub fn result(
+        time_stamp: i64,
+        speed_cpm: f64,
+        accuracy: f64,
+        samples: &[(char, u32)],
+    ) -> TypingResult {
+        let length = 100u32;
+        let time = (length as f64 / speed_cpm * 60_000.0).round() as u32;
+        let errors = ((1.0 - accuracy) * length as f64).round() as u32;
+        let histogram = Histogram::new(samples.iter().map(|&(c, ttt)| Sample {
+            cp: u32::from(c),
+            hit_count: 10,
+            miss_count: 0,
+            time_to_type: ttt,
+        }));
+        TypingResult::new(
+            "en-us",
+            TextType::Generated,
+            time_stamp,
+            length,
+            time,
+            errors,
+            histogram,
+        )
+    }
+
+    #[test]
+    fn computes_speed_accuracy_and_score() {
+        let r = result(0, 300.0, 0.98, &[('a', 200), ('b', 200), ('c', 200)]);
+        assert!((r.speed - 300.0).abs() < 0.1);
+        assert!((r.accuracy - 0.98).abs() < 1e-9);
+        assert_eq!(r.complexity, 3);
+        let expected = r.speed * 3.0 / 3.0 * 2.0;
+        assert!((r.score - expected).abs() < 1e-6);
+        assert!(r.validate());
+        assert!(!result(0, 300.0, 1.0, &[('a', 200)]).validate());
+    }
+
+    #[test]
+    fn recovers_results_with_implausible_samples() {
+        let r = result(
+            0,
+            300.0,
+            1.0,
+            &[('a', 200), ('b', 200), ('c', 200), ('d', 5)],
+        );
+        assert!(!r.validate());
+        let recovered = r.recover().unwrap();
+        assert_eq!(recovered.complexity, 3);
+        assert!(result(0, 300.0, 1.0, &[('a', 5)]).recover().is_none());
+    }
+}
