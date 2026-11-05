@@ -373,3 +373,19 @@ for (const file of fs.readdirSync(wordsDir)) {
     writeJson(`words/${file}`, JSON.parse(fs.readFileSync(path.join(wordsDir, file), "utf8")));
   }
 }
+
+const bookSrc = read("keybr-content", "lib", "books", "book.ts");
+const books = registryEntries(bookSrc, "Book").map(({ body }) => {
+  const [id, language, title, author] = splitArgs(body);
+  return {
+    id: str(id),
+    language: languageByKey.get(language.replace("Language.", "")).id,
+    title: str(title),
+    author: str(author),
+  };
+});
+const booksDir = path.join(PKG, "keybr-content-books", "lib", "data");
+for (const book of books) {
+  writeJson(`books/${book.id}.json`, JSON.parse(fs.readFileSync(path.join(booksDir, `${book.id}.json`), "utf8")));
+}
+writeJson("books/books.json", books);
