@@ -67,6 +67,82 @@ pub struct Styles {
     pub error: Style,
 }
 
+impl Styles {
+    pub fn new(theme: &Theme, mode: ColorMode) -> Self {
+        let depth = ColorDepth::detect(mode);
+        let c = |rgb: Rgb| to_color(depth, rgb);
+        match &theme.colors {
+            Some(p) => {
+                let base = Style::new().fg(c(p.text)).bg(c(p.background));
+                Styles {
+                    depth,
+                    palette: p.clone(),
+                    themed: true,
+                    base,
+                    panel: Style::new().fg(c(p.text)).bg(c(p.panel)),
+                    border: Style::new().fg(c(p.border)),
+                    title: Style::new().fg(c(p.accent)).add_modifier(Modifier::BOLD),
+                    tab: Style::new().fg(c(p.name)),
+                    tab_active: Style::new()
+                        .fg(c(p.background))
+                        .bg(c(p.accent))
+                        .add_modifier(Modifier::BOLD),
+                    text: Style::new().fg(c(p.text)),
+                    hit: Style::new().fg(c(p.hit)),
+                    miss: Style::new().fg(c(p.error)),
+                    garbage: Style::new()
+                        .fg(c(p.error))
+                        .add_modifier(Modifier::CROSSED_OUT),
+                    special: Style::new().fg(c(p.special)),
+                    name: Style::new().fg(c(p.name)),
+                    value: Style::new().fg(c(p.value)).add_modifier(Modifier::BOLD),
+                    more: Style::new().fg(c(p.more)),
+                    less: Style::new().fg(c(p.less)),
+                    accent: Style::new().fg(c(p.accent)),
+                    dim: Style::new().fg(c(p.special)),
+                    selected: Style::new().bg(c(p.panel)).add_modifier(Modifier::BOLD),
+                    error: Style::new().fg(c(p.error)).add_modifier(Modifier::BOLD),
+                }
+            }
+            None => {
+                // The terminal's own colors, with accents that read well on
+                // both light and dark backgrounds.
+                let p = Theme::get("light").colors.clone().expect("light palette");
+                Styles {
+                    depth,
+                    palette: p.clone(),
+                    themed: false,
+                    base: Style::new(),
+                    panel: Style::new(),
+                    border: Style::new().fg(Color::DarkGray),
+                    title: Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    tab: Style::new().fg(Color::Gray),
+                    tab_active: Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
+                    text: Style::new(),
+                    hit: Style::new().fg(Color::DarkGray),
+                    miss: Style::new().fg(Color::Red),
+                    garbage: Style::new()
+                        .fg(Color::Red)
+                        .add_modifier(Modifier::CROSSED_OUT),
+                    special: Style::new().fg(Color::DarkGray),
+                    name: Style::new().fg(Color::Gray),
+                    value: Style::new().add_modifier(Modifier::BOLD),
+                    more: Style::new().fg(Color::Green),
+                    less: Style::new().fg(Color::Red),
+                    accent: Style::new().fg(Color::Cyan),
+                    dim: Style::new().fg(Color::DarkGray),
+                    selected: Style::new().add_modifier(Modifier::REVERSED),
+                    error: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
+                }
+            }
+        }
+    }
+
+    pub fn color(&self, rgb: Rgb) -> Color {
+        to_color(self.depth, rgb)
+    }
+}
+
 fn to_color(depth: ColorDepth, rgb: Rgb) -> Color {
     match depth {
         ColorDepth::Truecolor => Color::Rgb(rgb.0, rgb.1, rgb.2),
