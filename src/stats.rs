@@ -163,3 +163,59 @@ impl CharClass {
         }
     }
 }
+
+/// How often a key was typed and missed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyUsage {
+    pub letter: Letter,
+    pub hits: u32,
+    pub misses: u32,
+    /// Misses per hit, when both are known.
+    pub ratio: Option<f64>,
+}
+
+pub fn key_usage(stats: &KeyStatsMap) -> Vec<KeyUsage> {
+    stats
+        .iter()
+        .map(|k| {
+            let hits: u32 = k.samples.iter().map(|s| s.hit_count).sum();
+            let misses: u32 = k.samples.iter().map(|s| s.miss_count).sum();
+            let ratio = (hits > 0 && misses > 0).then(|| misses as f64 / hits as f64);
+            KeyUsage {
+                letter: k.letter.clone(),
+                hits,
+                misses,
+                ratio,
+            }
+        })
+        .collect()
+}
+
+/// For every key, the confidence of each lesson resampled to `width`
+/// columns; `None` where the key was not typed.
+pub fn progress_overview(
+    stats: &KeyStatsMap,
+    target: &Target,
+    width: usize,
+) -> Vec<(Letter, Vec<Option<f64>>)> {
+    let lessons = stats.result_count;
+    stats
+        .iter()
+        .map(|k| {
+            let mut data = vec![None; lessons];
+            for s in &k.samples {
+                if s.index < lessons {
+                    data[s.index] = target.confidence(Some(s.time_to_type));
+                }
+            }
+            let columns = if lessons == 0 {
+                vec![None; width]
+            } else {
+                (0..width)
+                    .map(|i| data[(i * lessons / width).min(lessons - 1)])
+                    .collect()
+            };
+            (k.letter.clone(), columns)
+        })
+        .collect()
+}
