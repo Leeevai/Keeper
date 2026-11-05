@@ -171,3 +171,59 @@ mod player {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cues_follow_keybr() {
+        use Feedback::*;
+        assert_eq!(cue(PlaySounds::None, Failed), None);
+        assert_eq!(cue(PlaySounds::All, Succeeded), Some(Cue::Click));
+        assert_eq!(cue(PlaySounds::All, Recovered), Some(Cue::Click));
+        assert_eq!(cue(PlaySounds::All, Failed), Some(Cue::Blip));
+        assert_eq!(cue(PlaySounds::ErrorsOnly, Succeeded), None);
+        assert_eq!(cue(PlaySounds::ErrorsOnly, Failed), Some(Cue::Blip));
+        assert_eq!(cue(PlaySounds::KeysOnly, Succeeded), Some(Cue::Click));
+        assert_eq!(cue(PlaySounds::KeysOnly, Failed), None);
+    }
+
+    #[test]
+    fn every_theme_has_samples() {
+        for theme in SoundTheme::ALL {
+            let files = samples(theme);
+            assert!(!files.is_empty());
+            assert!(files.iter().all(|f| f.len() > 100));
+        }
+    }
+
+    #[cfg(feature = "sound")]
+    #[test]
+    fn samples_decode() {
+        use rodio::Source;
+        for theme in SoundTheme::ALL {
+            for data in samples(theme) {
+                let buffer = player::decode(data).expect("a valid mp3");
+                assert!(buffer.total_duration().unwrap().as_millis() > 10);
+            }
+        }
+        assert!(player::decode(BLIP).is_some());
+        assert!(player::decode(b"not an mp3").is_none());
+    }
+
+    /// Plays a few sounds on the real audio output: `cargo test -- --ignored`.
+    #[cfg(feature = "sound")]
+    #[test]
+    #[ignore]
+    fn plays_on_the_audio_output() {
+        let mut sounds = Sounds::default();
+        for theme in SoundTheme::ALL {
+            sounds.play(PlaySounds::All, theme, 0.3, Feedback::Succeeded);
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+        sounds.play(PlaySounds::All, SoundTheme::Default, 0.3, Feedback::Failed);
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        assert!(!sounds.failed, "no audio output");
+    }
+}
