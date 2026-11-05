@@ -248,6 +248,123 @@ impl TypingTest {
             speeds,
         });
     }
+
+    fn render_report(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        ctx: &RenderContext,
+        report: &Report,
+        history: &[TestResult],
+    ) {
+        let s = ctx.styles;
+        let unit = ctx.settings.speed_unit;
+        let r = &report.result;
+        let big = s.value.add_modifier(Modifier::BOLD);
+        let beats = Distribution::speed().cdf(r.speed) * 100.0;
+        let previous: Vec<&TestResult> = history
+            .iter()
+            .filter(|t| t.time_stamp != r.time_stamp)
+            .collect();
+        let best = previous.iter().map(|t| t.speed).fold(0.0, f64::max);
+        let recent: Vec<f64> = previous.iter().rev().take(10).map(|t| t.speed).collect();
+        let average = if recent.is_empty() {
+            0.0
+        } else {
+            recent.iter().sum::<f64>() / recent.len() as f64
+        };
+        let mut lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Speed  ", s.name),
+                Span::styled(unit.format(r.speed), big),
+            ])
+            .centered(),
+            Line::from(vec![
+                Span::styled("Accuracy  ", s.name),
+                Span::styled(format!("{:.1}%", r.accuracy * 100.0), big),
+                Span::styled("   Time  ", s.name),
+                Span::styled(format_duration(r.time as u64), big),
+                Span::styled("   Characters  ", s.name),
+                Span::styled(thousands(r.length as f64), big),
+                Span::styled("   Errors  ", s.name),
+                Span::styled(r.errors.to_string(), big),
+            ])
+            .centered(),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("This speed beats ", s.name),
+                Span::styled(format!("{beats:.1}%"), s.value),
+                Span::styled(" of all keybr.com users.", s.name),
+            ])
+            .centered(),
+        ];
+        if !previous.is_empty() {
+            let delta = r.speed - average;
+            lines.push(
+                Line::from(vec![
+                    Span::styled("Your best: ", s.name),
+                    Span::styled(unit.format(best), s.value),
+                    Span::styled(format!("   Average of the last {}: ", recent.len()), s.name),
+                    Span::styled(unit.format(average), s.value),
+                    Span::styled(
+                        format!(" ({})", crate::ui::signed(delta, unit.format(delta))),
+                        s.delta(delta),
+                    ),
+                ])
+                .centered(),
+            );
+            if r.speed > best {
+                lines.push(Line::from(Span::styled("A new personal best!", s.title)).centered());
+            }
+        }
+        let [text, chart, _, hint] = Layout::vertical([
+            Constraint::Length(lines.len() as u16 + 1),
+            Constraint::Length(8),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .areas(area);
+        frame.render_widget(Paragraph::new(lines), text);
+        // Stretch the windows across the chart, like keybr's resampling.
+        let columns = 58usize;
+        let data: Vec<u64> = if report.speeds.is_empty() {
+            Vec::new()
+        } else {
+            (0..columns)
+                .map(|i| {
+                    unit.measure(report.speeds[i * report.speeds.len() / columns])
+                        .round() as u64
+                })
+                .collect()
+        };
+        let chart = crate::ui::centered(chart, 60, 8);
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(s.border)
+            .title(Span::styled(
+                format!(" Speed during the test ({}) ", unit.id()),
+                s.name,
+            ));
+        frame.render_widget(
+            Sparkline::default()
+                .block(block)
+                .data(&data)
+                .style(Style::new().fg(s.color(s.palette.chart_speed))),
+            chart,
+        );
+        frame.render_widget(
+            Paragraph::new(
+                Line::from(Span::styled(
+                    "Press Enter or Esc to take a new test.",
+                    s.accent,
+                ))
+                .centered(),
+            ),
+            hint,
+        );
+    }
 }
 
 /// The serialized name of a setting value, e.g. `seconds15`.
