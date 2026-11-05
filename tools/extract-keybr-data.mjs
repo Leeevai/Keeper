@@ -426,3 +426,10 @@ const syntaxes = registryEntries(syntaxSrc, "Syntax").map(({ body }) => {
   return { id: str(id), name: str(label), grammar: grammars[grammar.trim()], start: str(start) };
 });
 writeJson("code/syntaxes.json", syntaxes);
+
+// ---------------------------------------------------------------------------
+// User speed and accuracy distributions, and typing sounds.
+
+for (const name of ["dist_speed.json", "dist_accuracy.json"]) {
+  writeJson(`dist/${name}`, JSON.parse(read("keybr-chart", "lib", "dist", name)));
+}
