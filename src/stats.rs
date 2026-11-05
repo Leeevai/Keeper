@@ -219,3 +219,16 @@ pub fn progress_overview(
         })
         .collect()
 }
+
+/// Practice time per day for the calendar, in milliseconds.
+pub fn practice_days(results: &[TypingResult]) -> BTreeMap<NaiveDate, u64> {
+    daily_stats(results)
+        .into_iter()
+        .map(|(date, day)| (date, day.stats.time))
+        .collect()
+}
+
+/// The Monday on or before the date.
+pub fn week_start(date: NaiveDate) -> NaiveDate {
+    date - Duration::days(date.weekday().num_days_from_monday() as i64)
+}
