@@ -191,3 +191,48 @@ impl Dictionary {
             .collect()
     }
 }
+
+/// A stream of words.
+trait WordSource {
+    fn next(&mut self, rng: &mut dyn Rng) -> Option<String>;
+}
+
+struct PhoneticWords<'a> {
+    model: &'a PhoneticModel,
+    filter: &'a Filter,
+}
+
+impl WordSource for PhoneticWords<'_> {
+    fn next(&mut self, rng: &mut dyn Rng) -> Option<String> {
+        Some(self.model.next_word(self.filter, rng)).filter(|w| !w.is_empty())
+    }
+}
+
+struct RandomWords<'a> {
+    words: &'a [String],
+}
+
+impl WordSource for RandomWords<'_> {
+    fn next(&mut self, rng: &mut dyn Rng) -> Option<String> {
+        (!self.words.is_empty()).then(|| random_sample(self.words, rng).clone())
+    }
+}
+
+struct WordSequence<'a> {
+    words: &'a [String],
+    index: &'a mut usize,
+}
+
+impl WordSource for WordSequence<'_> {
+    fn next(&mut self, _: &mut dyn Rng) -> Option<String> {
+        if self.words.is_empty() {
+            return None;
+        }
+        if *self.index >= self.words.len() {
+            *self.index = 0;
+        }
+        let word = self.words[*self.index].clone();
+        *self.index += 1;
+        Some(word)
+    }
+}
