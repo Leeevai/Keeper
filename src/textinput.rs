@@ -41,3 +41,31 @@ impl Class {
         }
     }
 }
+
+/// A span of text, optionally with a syntax class.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Span {
+    pub text: String,
+    pub cls: Option<Class>,
+}
+
+/// Text made of spans.
+pub type StyledText = Vec<Span>;
+
+pub fn plain(text: impl Into<String>) -> StyledText {
+    vec![Span {
+        text: text.into(),
+        cls: None,
+    }]
+}
+
+pub fn flatten(text: &StyledText) -> String {
+    text.iter().map(|s| s.text.as_str()).collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Char {
+    pub cp: u32,
+    pub attr: Attr,
+    pub cls: Option<Class>,
+}
