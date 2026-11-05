@@ -205,6 +205,78 @@ fn book_name(id: &str) -> String {
     format!("{} — {}", b.title, b.author)
 }
 
+impl Field {
+    pub fn label(self) -> String {
+        use Field::*;
+        match self {
+            LessonType => "Lesson type".into(),
+            NaturalWords => "Prefer natural words".into(),
+            KeyboardOrder => "Letters in keyboard order".into(),
+            AlphabetSize => "Unlock more letters".into(),
+            RecoverKeys => "Unlock a next key only when".into(),
+            WordListSize => "Word list size".into(),
+            LongWordsOnly => "Long words only".into(),
+            Book => "Book".into(),
+            ParagraphIndex => "Start at paragraph".into(),
+            BookLettersOnly | CustomLettersOnly => "Remove punctuation".into(),
+            BookLowercase | CustomLowercase => "Transform to lowercase".into(),
+            CustomText => "Custom text".into(),
+            CustomRandomize => "Shuffle words".into(),
+            CodeSyntax => "Syntax".into(),
+            CodeFlag(i) => format!("Include {}", FLAGS[i]),
+            Benford => "Benford's law".into(),
+            Capitals => "Add capital letters".into(),
+            Punctuators => "Add punctuation".into(),
+            RepeatWords => "Repeat each word".into(),
+            LessonLength => "Add words to lessons".into(),
+            TargetSpeed => "Target typing speed".into(),
+            DailyGoal => "Daily goal".into(),
+            StopOnError => "Stop cursor on error".into(),
+            ForgiveErrors => "Forgive errors".into(),
+            SpaceSkipsWords => "Space skips words".into(),
+            CaretShape => "Cursor shape".into(),
+            Whitespace => "Whitespace".into(),
+            PlaySounds => "Play sounds".into(),
+            SoundTheme => "Sound theme".into(),
+            SoundVolume => "Volume".into(),
+            Language => "Language".into(),
+            Layout => "Layout".into(),
+            Geometry => "Geometry".into(),
+            Zones => "Finger zones".into(),
+            Emulation => "Layout emulation".into(),
+            SystemLayout => "Your system layout".into(),
+            KeyboardColors => "Colored keys".into(),
+            KeyboardPointers => "Highlight keys".into(),
+            SpeedUnit => "Measure typing speed in".into(),
+            Theme => "Theme".into(),
+            ColorMode => "Terminal colors".into(),
+            View => "Practice view".into(),
+            TestDuration => "Test length".into(),
+            TestSource => "Text".into(),
+            TestLanguage => "Language".into(),
+            TestWordListSize => "Word list size".into(),
+            TestBook => "Book".into(),
+            TestParagraph => "Start at paragraph".into(),
+        }
+    }
+}
+
+/// The number of lines a text takes when wrapped at word boundaries.
+fn wrapped_height(text: &str, width: usize) -> u16 {
+    let width = width.max(1);
+    let mut lines = 1;
+    let mut used = 0;
+    for word in text.split_whitespace() {
+        let n = word.chars().count();
+        if used > 0 && used + 1 + n > width {
+            lines += 1;
+            used = 0;
+        }
+        used += if used > 0 { 1 + n } else { n };
+    }
+    lines
+}
+
 fn step_list_size(value: u32, delta: i32) -> u32 {
     let step = if value < 100 || (value == 100 && delta < 0) {
         10
