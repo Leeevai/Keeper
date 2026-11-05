@@ -552,6 +552,92 @@ impl Lesson {
         }
         keys
     }
+
+    /// Generates the text of the next lesson.
+    pub fn generate(&mut self, keys: &LessonKeys, rng: &mut dyn Rng) -> StyledText {
+        let settings = &self.settings;
+        let punctuators: Vec<Letter> = Letter::punctuators()
+            .into_iter()
+            .filter(|l| self.code_points.has(l.cp))
+            .collect();
+        match &mut self.kind {
+            Kind::Guided { dictionary } => {
+                let included: Vec<u32> = keys.included().map(|k| k.letter.cp).collect();
+                let filter = if included.is_empty() {
+                    Filter::default()
+                } else {
+                    Filter::new(&included, keys.focused().map(|k| k.letter.cp))
+                };
+                let mut pseudo = PhoneticWords {
+                    model: &self.model,
+                    filter: &filter,
+                };
+                let natural = settings.natural_words.then(|| {
+                    let mut words: Vec<String> =
+                        dictionary.find(&filter).into_iter().take(1000).collect();
+                    while words.len() < 15 {
+                        match pseudo.next(rng) {
+                            Some(w) => words.push(w),
+                            None => break,
+                        }
+                    }
+                    if words.is_empty() {
+                        words.push("?".into());
+                    }
+                    words
+                });
+                let text = match &natural {
+                    Some(words) => {
+                        let source = UniqueWords {
+                            inner: RandomWords { words },
+                            last: String::new(),
+                        };
+                        mangle_and_join(settings, self.language, punctuators, source, rng)
+                    }
+                    None => {
+                        let source = UniqueWords {
+                            inner: pseudo,
+                            last: String::new(),
+                        };
+                        mangle_and_join(settings, self.language, punctuators, source, rng)
+                    }
+                };
+                plain(text)
+            }
+            Kind::WordList { words } => {
+                let source = UniqueWords {
+                    inner: RandomWords { words },
+                    last: String::new(),
+                };
+                plain(mangle_and_join(
+                    settings,
+                    self.language,
+                    punctuators,
+                    source,
+                    rng,
+                ))
+            }
+            Kind::Sequence {
+                words,
+                index,
+                randomize,
+            } => {
+                let text = if *randomize && !words.is_empty() {
+                    let mut source = UniqueWords {
+                        inner: RandomWords { words },
+                        last: String::new(),
+                    };
+                    generate_fragment(settings, &mut source, 1, rng)
+                } else {
+                    let mut source = WordSequence { words, index };
+                    generate_fragment(settings, &mut source, 1, rng)
+                };
+                plain(text)
+            }
+            Kind::Numbers => plain(generate_numbers(settings.benford, rng)),
+            Kind::Code { syntax, flags } => syntax.generate(flags, rng),
+        }
+    }
 }
 
 fn mangle_and_join(
