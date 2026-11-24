@@ -67,32 +67,10 @@ pub struct Syntax {
 fn rule_set(name: &str) -> &'static Rules {
     static CACHE: OnceLock<HashMap<String, Rules>> = OnceLock::new();
     let all = CACHE.get_or_init(|| {
-        [
-            "_comments",
-            "_ident",
-            "_keywords",
-            "_literals",
-            "lang_cpp",
-            "lang_csharp",
-            "lang_go",
-            "lang_html_css",
-            "lang_java",
-            "lang_javascript",
-            "lang_php",
-            "lang_python",
-            "lang_regex",
-            "lang_rust",
-            "lang_shell",
-            "lang_typescript",
-        ]
-        .into_iter()
-        .map(|n| {
-            (
-                n.to_string(),
-                serde_json::from_str(assets::grammar_json(n).unwrap()).expect(n),
-            )
-        })
-        .collect()
+        assets::GRAMMARS
+            .iter()
+            .map(|(name, json)| (name.to_string(), serde_json::from_str(json).expect(name)))
+            .collect()
     });
     &all[name]
 }
@@ -101,8 +79,13 @@ impl Syntax {
     pub fn all() -> &'static [Syntax] {
         static ALL: OnceLock<Vec<Syntax>> = OnceLock::new();
         ALL.get_or_init(|| {
-            let data: Vec<SyntaxData> =
+            let mut data: Vec<SyntaxData> =
                 serde_json::from_str(assets::SYNTAXES_JSON).expect("syntaxes.json");
+            let keeper: Vec<SyntaxData> =
+                serde_json::from_str(assets::KEEPER_SYNTAXES_JSON).expect("keeper/syntaxes.json");
+            data.extend(keeper);
+            // In the settings, keybr's and Keeper's syntaxes are listed together.
+            data.sort_by_key(|d| d.name.to_lowercase());
             data.into_iter()
                 .map(|d| {
                     let grammar: Vec<&'static Rules> =
@@ -346,7 +329,16 @@ mod tests {
 
     #[test]
     fn every_syntax_generates_code() {
-        assert_eq!(Syntax::all().len(), 16);
+        assert!(Syntax::all().len() >= 16);
+        let mut ids: Vec<&str> = Syntax::all().iter().map(|s| s.id.as_str()).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), Syntax::all().len(), "every syntax id is unique");
+        let names: Vec<String> = Syntax::all()
+            .iter()
+            .map(|s| s.name.to_lowercase())
+            .collect();
+        assert!(names.is_sorted(), "{names:?}");
         let all_flags: HashSet<String> = FLAGS.iter().map(|s| s.to_string()).collect();
         for syntax in Syntax::all() {
             for flags in [HashSet::new(), all_flags.clone()] {
@@ -383,5 +375,63 @@ mod tests {
             assert!(text.iter().all(|s| s.cls != Some(Class::Comment)));
         }
         assert_eq!(Syntax::get("nope").id, "html");
+    }
+
+    fn references(p: &Prod, out: &mut Vec<String>) {
+        match p {
+            Prod::Ref { r#ref } => out.push(r#ref.clone()),
+            Prod::Cond { cond, .. } => references(cond, out),
+            Prod::Span { span, .. } => references(span, out),
+            Prod::Opt { opt, .. } => references(opt, out),
+            Prod::Seq { seq: items } | Prod::Alt { alt: items } => {
+                items.iter().for_each(|c| references(c, out))
+            }
+            Prod::Lit(_) => {}
+        }
+    }
+
+    #[test]
+    fn every_rule_reference_resolves() {
+        for syntax in Syntax::all() {
+            assert!(syntax.rule(&syntax.start).is_some(), "{}", syntax.id);
+            let mut refs = Vec::new();
+            for rules in &syntax.grammar {
+                rules.values().for_each(|p| references(p, &mut refs));
+            }
+            for name in refs {
+                assert!(syntax.rule(&name).is_some(), "{}: {name}", syntax.id);
+            }
+        }
+    }
+
+    /// Keeper's own grammars, and text that only that language has.
+    const KEEPER_SYNTAXES: &[(&str, &[&str])] = &[
+        ("kotlin", &["fun ", "val ", "?."]),
+        ("swift", &["func ", "let ", "guard let"]),
+        ("dart", &["final ", "=> ", "?? "]),
+        ("ruby", &["def ", " end", "do |"]),
+        ("elixir", &["defmodule ", "|> ", " do "]),
+        ("lua", &["local ", " then ", " end"]),
+        ("sql", &["SELECT ", " FROM ", " WHERE "]),
+        ("haskell", &[" :: ", " -> ", " = "]),
+    ];
+
+    #[test]
+    fn keeper_syntaxes_look_like_their_language() {
+        let all_flags: HashSet<String> = FLAGS.iter().map(|s| s.to_string()).collect();
+        for (id, tokens) in KEEPER_SYNTAXES {
+            let syntax = Syntax::get(id);
+            assert_eq!(syntax.id, *id);
+            let mut rng = Lcg::new(7);
+            let text: Vec<String> = (0..60)
+                .map(|_| flatten(&syntax.generate(&all_flags, &mut rng)))
+                .collect();
+            let text = text.join(" ");
+            for token in *tokens {
+                assert!(text.contains(token), "{id} has no {token:?}: {text}");
+            }
+            // Every option changes something.
+            assert!(!syntax.flags.is_empty(), "{id}");
+        }
     }
 }

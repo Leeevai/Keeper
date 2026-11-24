@@ -247,12 +247,21 @@ impl Practice {
         }
 
         let box_area = crate::ui::centered(text_area, text_width + 4, text_height + 2);
-        // The practiced language may differ from the language of the
-        // layout, such as British English on the US layout.
+        // A code lesson names its syntax. Others name the practiced
+        // language, which may differ from the language of the layout, such
+        // as British English on the US layout.
+        let subject = match self.lesson.lesson_type {
+            crate::settings::LessonType::Code => {
+                crate::code::Syntax::get(&self.lesson.settings.code_syntax)
+                    .name
+                    .to_string()
+            }
+            _ => self.lesson.language.name.to_string(),
+        };
         let title = format!(
             " {} · {} · {} ",
             self.lesson.lesson_type.name(),
-            self.lesson.language.name,
+            subject,
             self.lesson.layout().name
         );
         let block = Block::new()

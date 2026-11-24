@@ -466,6 +466,37 @@ fn emulates_colemak_on_a_qwerty_system() {
 }
 
 #[test]
+fn practices_code_in_a_language_written_for_keeper() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("settings.json"),
+        r#"{"lesson.type": "code", "lesson.code.syntax": "kotlin"}"#,
+    )
+    .unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(
+        term.screen()
+            .contains("Source code · Kotlin · United States"),
+        "{}",
+        term.screen()
+    );
+    let lesson = term.box_text();
+    assert!(lesson.chars().count() > 20, "{lesson}");
+    // Brackets, quotes and operators are typed as shown.
+    term.type_text(&lesson, Duration::from_millis(40));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    let result: serde_json::Value = serde_json::from_str(results.lines().next().unwrap()).unwrap();
+    assert_eq!(result["textType"], "code", "{results}");
+    assert_eq!(result["errors"], 0, "{lesson}");
+    assert!(term.quit());
+}
+
+#[test]
 fn practicing_another_language_with_its_own_letters() {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(
