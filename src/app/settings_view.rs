@@ -1240,7 +1240,7 @@ mod tests {
         assert_eq!(s.theme, "light");
         press(&mut view, &mut s, KeyCode::Left);
         press(&mut view, &mut s, KeyCode::Left);
-        assert_eq!(s.theme, "honey");
+        assert_eq!(s.theme, "tokyo-night");
         select(&mut view, &s, Field::DailyGoal);
         for _ in 0..10 {
             press(&mut view, &mut s, KeyCode::Left);

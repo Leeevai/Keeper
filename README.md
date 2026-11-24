@@ -96,9 +96,11 @@ The settings keep keybr's names, defaults and ranges.
 - **Layout emulation**: practice a layout without changing your system settings. Keys
   you type on your system layout (US by default) are translated into the practiced
   layout by key position. Turn it off if your system already uses that layout.
-- **Miscellaneous**: speed in words or characters per minute or second, nine themes
-  (System, which uses your terminal's colors, and keybr's Light, Dark, Gray, Yellow,
-  Garden, Coffee, Chocolate and Honey), 24-bit or 256 colors.
+- **Miscellaneous**: speed in words or characters per minute or second, 15 themes
+  (System, which uses your terminal's colors; keybr's Light, Dark, Gray, Yellow,
+  Garden, Coffee, Chocolate and Honey; and the dark editor palettes Dracula, Nord,
+  Gruvbox, Solarized, Catppuccin and Tokyo Night, whose accents also color the keys,
+  charts and code), 24-bit or 256 colors.
 
 ## Your data
 
