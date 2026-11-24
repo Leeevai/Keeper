@@ -89,5 +89,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "haskell",
+    "name": "Haskell",
+    "grammar": [
+      "lang_haskell",
+      "_names",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]

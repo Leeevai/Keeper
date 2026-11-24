@@ -135,6 +135,10 @@ pub const GRAMMARS: &[(&str, &str)] = &[
         "lang_sql",
         include_str!("../assets/code/keeper/lang_sql.json"),
     ),
+    (
+        "lang_haskell",
+        include_str!("../assets/code/keeper/lang_haskell.json"),
+    ),
 ];
 
 /// Code syntaxes written for Keeper, listed after keybr.com's.

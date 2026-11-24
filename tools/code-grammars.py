@@ -1026,6 +1026,142 @@ language("sql", "SQL", rules={
 
 
 # ---------------------------------------------------------------------------
+# Haskell
+
+language("haskell", "Haskell", rules={
+    "start": ref("hs_statement"),
+    "hs_statement": alt(
+        flag("types", ref("hs_signature")),
+        ref("hs_definition"),
+        ref("hs_definition"),
+        ref("hs_definition"),
+        flag("defs", ref("hs_declaration")),
+        ref("hs_import"),
+        ref("hs_do"),
+        flag("comments", ref("hs_comment")),
+    ),
+    "hs_signature": seq(
+        ref("hs_function_name"), SP, "::", SP,
+        opt(seq(alt(seq(alt("Eq", "Ord", "Show", "Num"), SP, "a"), "Monad m"), SP, "=>", SP), 0.25),
+        ref("hs_type"), opt(seq(SP, "->", SP, ref("hs_type"))), SP, "->", SP, ref("hs_type"),
+    ),
+    "hs_definition": alt(
+        seq(ref("hs_function_name"), SP, ref("hs_patterns"), SP, "=", SP, ref("hs_expression")),
+        seq(
+            ref("hs_function_name"), SP, ref("hs_name"), SP, "=", SP, kw("case"), SP, ref("hs_name"), SP,
+            kw("of"), SP, "{", SP, ref("hs_case_alternatives"), SP, "}",
+        ),
+        seq(
+            ref("hs_function_name"), SP, ref("hs_name"), SP, "|", SP, ref("hs_guard"), SP, "=", SP,
+            ref("hs_expression"), SP, "|", SP, kw("otherwise"), SP, "=", SP, ref("hs_expression"),
+        ),
+        seq(
+            ref("hs_function_name"), SP, ref("hs_name"), SP, "=", SP, ref("hs_expression"), SP,
+            kw("where"), SP, ref("hs_name"), SP, "=", SP, ref("hs_simple"),
+        ),
+        seq(
+            ref("hs_function_name"), SP, "=", SP, kw("let"), SP, ref("hs_name"), SP, "=", SP,
+            ref("hs_simple"), SP, kw("in"), SP, ref("hs_expression"),
+        ),
+    ),
+    "hs_patterns": alt(
+        ref("hs_name"),
+        seq(ref("hs_name"), SP, ref("hs_name")),
+        "(x:xs)", "[]", "_",
+        seq("(Just", SP, ref("hs_name"), ")"),
+        "Nothing",
+    ),
+    "hs_case_alternatives": alt(
+        seq("Just", SP, ref("hs_name"), SP, "->", SP, ref("hs_simple"), ";", SP, "Nothing", SP, "->", SP, ref("hs_literal")),
+        seq("[]", SP, "->", SP, ref("hs_literal"), ";", SP, "(x:_)", SP, "->", SP, "x"),
+        seq("Left", SP, "err", SP, "->", SP, "error", SP, "err;", SP, "Right", SP, ref("hs_name"), SP, "->", SP, ref("hs_name")),
+    ),
+    "hs_guard": seq(ref("hs_name"), SP, alt(">", "<", "==", "/=", ">=", "<="), SP, ref("hs_literal")),
+    "hs_expression": alt(
+        ref("hs_literal"),
+        ref("hs_simple"),
+        seq(alt("map", "filter", "foldr", "zipWith", "concatMap", "fmap", "traverse"), SP,
+            ref("hs_function_argument"), SP, ref("hs_name")),
+        binary("hs_name", ["+", "-", "*", "++", "<>", "`div`", "`mod`"], "hs_expression"),
+        seq(ref("hs_function_name"), SP, "$", SP, ref("hs_expression")),
+        seq(ref("hs_function_name"), SP, ".", SP, ref("hs_function_name"), SP, "$", SP, ref("hs_name")),
+        seq(kw("if"), SP, ref("hs_guard"), SP, kw("then"), SP, ref("hs_literal"), SP, kw("else"), SP, ref("hs_literal")),
+        seq("[", ref("hs_name"), SP, "|", SP, ref("hs_name"), SP, "<-", SP, ref("hs_name"), ",", SP, ref("hs_guard"), "]"),
+        seq(ref("hs_name"), SP, ">>=", SP, ref("hs_function_name")),
+        seq(ref("hs_function_name"), SP, "<$>", SP, ref("hs_name")),
+    ),
+    "hs_function_argument": alt(
+        seq("(", alt("+", "*", "-"), SP, ref("hs_int_or_name"), ")"),
+        ref("hs_function_name"),
+        seq("(\\", ref("hs_name"), SP, "->", SP, ref("hs_name"), SP, alt("+", "*"), SP, ref("hs_int_or_name"), ")"),
+        "show", "even", "not",
+    ),
+    "hs_simple": alt(
+        ref("hs_name"),
+        seq(ref("hs_function_name"), SP, ref("hs_name")),
+        seq("(", ref("hs_name"), ",", SP, ref("hs_name"), ")"),
+        seq("Just", SP, ref("hs_name")),
+        seq("length", SP, ref("hs_name")),
+        seq("show", SP, ref("hs_name")),
+    ),
+    "hs_declaration": alt(
+        seq(
+            kw("data"), SP, ref("hs_type_name"), SP, "=", SP,
+            alt("Red | Green | Blue", "Leaf | Node Tree Tree", "Idle | Running Int | Done",
+                "Circle Double | Rect Double Double"),
+            opt(seq(SP, kw("deriving"), SP, alt("(Show, Eq)", "(Show)", "(Eq, Ord)")), 0.7),
+        ),
+        seq(
+            kw("data"), SP, ref("hs_type_name"), SP, "=", SP, ref("hs_type_name"), SP, "{", SP,
+            ref("hs_field"), opt(seq(",", SP, ref("hs_field"))), SP, "}",
+        ),
+        seq(kw("newtype"), SP, ref("hs_type_name"), SP, "=", SP, ref("hs_type_name"), SP, ref("hs_basic_type")),
+        seq(kw("type"), SP, ref("hs_type_name"), SP, "=", SP, ref("hs_type")),
+        seq(
+            kw("class"), SP, ref("hs_type_name"), SP, "a", SP, kw("where"), SP, ref("hs_function_name"),
+            SP, "::", SP, "a", SP, "->", SP, ref("hs_basic_type"),
+        ),
+        seq(
+            kw("instance"), SP, alt("Show", "Eq", "Semigroup"), SP, ref("hs_type_name"), SP, kw("where"),
+        ),
+    ),
+    "hs_field": seq(ref("hs_name"), SP, "::", SP, ref("hs_basic_type")),
+    "hs_import": seq(
+        kw("import"), SP, opt(seq(kw("qualified"), SP), 0.4),
+        alt("Data.Map", "Data.List", "Data.Maybe", "Control.Monad", "Data.Text", "System.IO", "Data.Char"),
+        opt(seq(SP, kw("as"), SP, alt("M", "T", "Map", "L")), 0.4),
+    ),
+    "hs_do": seq(
+        ref("hs_function_name"), SP, "=", SP, kw("do"), SP, "{", SP, ref("hs_name"), SP, "<-", SP,
+        alt("getLine", "readLn", seq("pure", SP, ref("hs_name"))), ";", SP,
+        alt("putStrLn", "print"), SP, ref("hs_name"), SP, "}",
+    ),
+    "hs_type": alt(
+        ref("hs_basic_type"),
+        ref("hs_basic_type"),
+        seq("[", ref("hs_basic_type"), "]"),
+        seq("Maybe", SP, ref("hs_basic_type")),
+        seq("(", ref("hs_basic_type"), ",", SP, ref("hs_basic_type"), ")"),
+        "IO ()",
+        seq("Map", SP, "String", SP, ref("hs_basic_type")),
+    ),
+    "hs_basic_type": alt("Int", "Integer", "String", "Bool", "Double", "Text", "a", ref("hs_type_name")),
+    "hs_literal": alt(
+        flag("numbers", ref("hs_number")),
+        flag("strings", ref("hs_string")),
+        "True", "False", "Nothing", "[]", "()",
+    ),
+    "hs_number": number(alt(ref("integer_dec_literal"), ref("float_dec_literal"))),
+    "hs_int_or_name": alt(flag("numbers", number(ref("integer_dec_literal"))), ref("hs_name")),
+    "hs_string": string(seq('"', ref("generic_string_content"), '"')),
+    "hs_name": alt("x", "y", "xs", "ys", "n", "acc", "k", "v", ref("camel_variable_name")),
+    "hs_function_name": ref("camel_function_name"),
+    "hs_type_name": ref("generic_class_name"),
+    "hs_comment": comment(seq("-- ", ref("comment_text"))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):

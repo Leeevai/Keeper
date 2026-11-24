@@ -406,6 +406,7 @@ mod tests {
         ("elixir", &["defmodule ", "|> ", " do "]),
         ("lua", &["local ", " then ", " end"]),
         ("sql", &["SELECT ", " FROM ", " WHERE "]),
+        ("haskell", &[" :: ", " -> ", " = "]),
     ];
 
     #[test]
