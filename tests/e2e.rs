@@ -32,12 +32,21 @@ fn size(rows: u16, cols: u16) -> PtySize {
 
 impl Term {
     fn start(home: &Path, rows: u16, cols: u16) -> Term {
+        Self::start_with(home, rows, cols, &[])
+    }
+
+    /// Starts keeper with extra environment variables.
+    fn start_with(home: &Path, rows: u16, cols: u16, env: &[(&str, &str)]) -> Term {
         let pty = native_pty_system();
         let pair = pty.openpty(size(rows, cols)).expect("a pty");
         let mut cmd = CommandBuilder::new(BIN);
         cmd.env("KEEPER_HOME", home);
         cmd.env("TERM", "xterm-256color");
         cmd.env_remove("COLORTERM");
+        cmd.env_remove("NO_COLOR");
+        for (name, value) in env {
+            cmd.env(name, value);
+        }
         let child = pair.slave.spawn_command(cmd).expect("keeper starts");
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().expect("a reader");
@@ -603,6 +612,80 @@ fn survives_resizing() {
         "{}",
         term.screen()
     );
+    assert!(term.quit());
+}
+
+/// Every cell of the screen, as (row, column, cell).
+fn cells(term: &Term) -> Vec<(u16, u16, vt100::Cell)> {
+    let screen = term.parser.screen();
+    let (rows, cols) = screen.size();
+    let mut out = Vec::new();
+    for row in 0..rows.get() {
+        for col in 0..cols.get() {
+            if let Some(cell) = screen.cell(row, col) {
+                out.push((row, col, cell.clone()));
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn turns_colors_off_with_no_color() {
+    let home = tempfile::tempdir().unwrap();
+    let mut term = Term::start_with(home.path(), 40, 110, &[("NO_COLOR", "1")]);
+    let colored: Vec<_> = cells(&term)
+        .into_iter()
+        .filter(|(_, _, c)| {
+            c.fgcolor() != vt100::Color::Default || c.bgcolor() != vt100::Color::Default
+        })
+        .map(|(row, col, _)| (row, col))
+        .collect();
+    assert!(
+        colored.is_empty(),
+        "colored cells: {colored:?}\n{}",
+        term.screen()
+    );
+    // The caret and the key to press are in reverse video.
+    let reversed = cells(&term).iter().filter(|(_, _, c)| c.inverse()).count();
+    assert!(reversed >= 2, "{}", term.screen());
+    // A wrong key is underlined in the text.
+    let lesson = term.box_text();
+    let wrong = if lesson.starts_with('q') { "z" } else { "q" };
+    term.type_text(wrong, Duration::from_millis(60));
+    term.pump(Duration::from_millis(200));
+    assert!(
+        cells(&term)
+            .iter()
+            .any(|(_, _, c)| c.underline() && c.bold()),
+        "{}",
+        term.screen()
+    );
+    assert!(term.quit());
+}
+
+#[test]
+fn uses_the_basic_colors_on_the_linux_console() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(home.path().join("settings.json"), r#"{"ui.theme": "dark"}"#).unwrap();
+    let mut term = Term::start_with(home.path(), 40, 110, &[("TERM", "linux")]);
+    let basic = |c: vt100::Color| match c {
+        vt100::Color::Default => true,
+        vt100::Color::Idx(i) => i < 16,
+        vt100::Color::Rgb(..) => false,
+    };
+    let mut colors = std::collections::HashSet::new();
+    for (row, col, cell) in cells(&term) {
+        assert!(
+            basic(cell.fgcolor()) && basic(cell.bgcolor()),
+            "{row},{col}: {:?} on {:?}",
+            cell.fgcolor(),
+            cell.bgcolor()
+        );
+        colors.insert(format!("{:?}", cell.bgcolor()));
+    }
+    // The keyboard still shows its key colors.
+    assert!(colors.len() >= 3, "{colors:?}");
     assert!(term.quit());
 }
 
