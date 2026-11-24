@@ -1,5 +1,6 @@
 //! Shared terminal UI pieces: styles, the keyboard and the text area.
 
+pub mod basic_colors;
 pub mod keyboard;
 pub mod text;
 
