@@ -276,6 +276,69 @@ impl Base {
     }
 }
 
+/// A dark editor palette: a background, a text color, a muted color for
+/// comments and eight accents, which also color the keys, charts and code.
+struct Scheme {
+    bg: u32,
+    fg: u32,
+    muted: u32,
+    red: u32,
+    orange: u32,
+    yellow: u32,
+    green: u32,
+    cyan: u32,
+    blue: u32,
+    purple: u32,
+    /// The color of titles, tabs and the caret: the palette's signature.
+    accent: u32,
+}
+
+impl Scheme {
+    fn palette(&self) -> Palette {
+        let bg = Rgb::hex(self.bg);
+        let fg = Rgb::hex(self.fg);
+        let c = Rgb::hex;
+        // Key and chart colors are softened a little toward the background.
+        let soft = |v: u32| bg.mix(c(v), 25.0);
+        Palette {
+            background: bg,
+            panel: bg.lighten(5.0),
+            border: bg.mix(fg, 70.0),
+            text: fg,
+            accent: c(self.accent),
+            error: c(self.red),
+            hit: bg.mix(fg, 40.0),
+            special: bg.mix(fg, 55.0),
+            name: c(self.muted).lighten(15.0),
+            value: fg.lighten(10.0),
+            more: c(self.green),
+            less: c(self.red),
+            slow_key: soft(self.red),
+            fast_key: soft(self.green),
+            pointer: c(self.blue),
+            zones: [
+                soft(self.cyan),
+                soft(self.green),
+                soft(self.yellow),
+                soft(self.blue),
+                soft(self.purple),
+                soft(self.orange),
+            ],
+            chart_speed: c(self.green),
+            chart_accuracy: c(self.orange),
+            chart_complexity: c(self.purple),
+            chart_threshold: c(self.red),
+            chart_hits: c(self.blue),
+            chart_misses: c(self.red),
+            chart_ratio: c(self.cyan),
+            syntax_keyword: c(self.purple),
+            syntax_string: c(self.green),
+            syntax_number: c(self.orange),
+            syntax_comment: c(self.muted),
+        }
+    }
+}
+
 impl Theme {
     pub fn all() -> &'static [Theme] {
         static ALL: std::sync::OnceLock<Vec<Theme>> = std::sync::OnceLock::new();
@@ -293,6 +356,18 @@ impl Theme {
                 theme("chocolate", "Chocolate", Some(Base { primary: 0x604a43, secondary: 0xcfcfcf, accent: 0xe3a390, error: 0xa34729, slow: 0xcf5f5f, fast: 0x6fa882, mix: 20.0, dark: true })),
                 theme("honey", "Honey", Some(Base { primary: 0xffbf00, secondary: 0x402609, accent: 0x754c22, error: 0xb83d14, slow: 0xcc8b00, fast: 0x8cc64e, mix: 30.0, dark: false })),
             ];
+            let scheme = |id, name, s: Scheme| Theme { id, name, colors: Some(s.palette()) };
+            #[rustfmt::skip]
+            let schemes = [
+                scheme("dracula", "Dracula", Scheme { bg: 0x282a36, fg: 0xf8f8f2, muted: 0x6272a4, red: 0xff5555, orange: 0xffb86c, yellow: 0xf1fa8c, green: 0x50fa7b, cyan: 0x8be9fd, blue: 0xff79c6, purple: 0xbd93f9, accent: 0xbd93f9 }),
+                scheme("nord", "Nord", Scheme { bg: 0x2e3440, fg: 0xd8dee9, muted: 0x7b88a1, red: 0xbf616a, orange: 0xd08770, yellow: 0xebcb8b, green: 0xa3be8c, cyan: 0x8fbcbb, blue: 0x81a1c1, purple: 0xb48ead, accent: 0x88c0d0 }),
+                scheme("gruvbox", "Gruvbox", Scheme { bg: 0x282828, fg: 0xebdbb2, muted: 0x928374, red: 0xfb4934, orange: 0xfe8019, yellow: 0xfabd2f, green: 0xb8bb26, cyan: 0x8ec07c, blue: 0x83a598, purple: 0xd3869b, accent: 0xfabd2f }),
+                scheme("solarized", "Solarized", Scheme { bg: 0x002b36, fg: 0x93a1a1, muted: 0x657b83, red: 0xdc322f, orange: 0xcb4b16, yellow: 0xb58900, green: 0x859900, cyan: 0x2aa198, blue: 0x268bd2, purple: 0x6c71c4, accent: 0x268bd2 }),
+                scheme("catppuccin", "Catppuccin", Scheme { bg: 0x1e1e2e, fg: 0xcdd6f4, muted: 0x7f849c, red: 0xf38ba8, orange: 0xfab387, yellow: 0xf9e2af, green: 0xa6e3a1, cyan: 0x94e2d5, blue: 0x89b4fa, purple: 0xcba6f7, accent: 0xcba6f7 }),
+                scheme("tokyo-night", "Tokyo Night", Scheme { bg: 0x1a1b26, fg: 0xc0caf5, muted: 0x565f89, red: 0xf7768e, orange: 0xff9e64, yellow: 0xe0af68, green: 0x9ece6a, cyan: 0x7dcfff, blue: 0x7aa2f7, purple: 0xbb9af7, accent: 0x7aa2f7 }),
+            ];
+            let mut themes = themes;
+            themes.extend(schemes);
             themes
         })
     }
@@ -355,9 +430,77 @@ mod tests {
 
     #[test]
     fn themes() {
-        assert_eq!(Theme::all().len(), 9);
+        assert_eq!(Theme::all().len(), 15);
         assert!(Theme::get("system").colors.is_none());
         assert!(Theme::get("dark").colors.is_some());
         assert_eq!(Theme::get("nope").id, "system");
+        let ids: Vec<&str> = Theme::all().iter().map(|t| t.id).collect();
+        let unique: std::collections::HashSet<&&str> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "{ids:?}");
+        for id in [
+            "dracula",
+            "nord",
+            "gruvbox",
+            "solarized",
+            "catppuccin",
+            "tokyo-night",
+        ] {
+            assert!(Theme::find(id).is_some(), "{id}");
+        }
+    }
+
+    /// The WCAG contrast ratio of two colors, from 1 to 21.
+    fn contrast_ratio(a: Rgb, b: Rgb) -> f64 {
+        let luminance = |c: Rgb| {
+            let channel = |v: u8| {
+                let v = v as f64 / 255.0;
+                if v <= 0.03928 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(c.0) + 0.7152 * channel(c.1) + 0.0722 * channel(c.2)
+        };
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    #[test]
+    fn dark_palettes_are_readable() {
+        for id in [
+            "dracula",
+            "nord",
+            "gruvbox",
+            "solarized",
+            "catppuccin",
+            "tokyo-night",
+        ] {
+            let p = Theme::get(id).colors.clone().unwrap();
+            let bg = p.background;
+            // Text to type, typed text, errors and code all stand out.
+            assert!(contrast_ratio(p.text, bg) >= 4.5, "{id} text");
+            assert!(contrast_ratio(p.hit, bg) >= 2.5, "{id} typed text");
+            assert!(contrast_ratio(p.error, bg) >= 3.0, "{id} errors");
+            assert!(contrast_ratio(p.accent, bg) >= 3.0, "{id} accent");
+            for (name, c) in [
+                ("keyword", p.syntax_keyword),
+                ("string", p.syntax_string),
+                ("number", p.syntax_number),
+                ("comment", p.syntax_comment),
+            ] {
+                assert!(contrast_ratio(c, bg) >= 2.5, "{id} {name}");
+            }
+            // Typed text is dimmer than the text still to type.
+            assert!(
+                contrast_ratio(p.hit, bg) < contrast_ratio(p.text, bg),
+                "{id}"
+            );
+            // Every finger zone has its own color.
+            let mut zones: Vec<(u8, u8, u8)> = p.zones.iter().map(|c| (c.0, c.1, c.2)).collect();
+            zones.sort();
+            zones.dedup();
+            assert_eq!(zones.len(), 6, "{id}");
+        }
     }
 }
