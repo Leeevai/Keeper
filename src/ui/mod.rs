@@ -217,10 +217,21 @@ impl Styles {
 
     /// A style with the given background and a readable foreground.
     pub fn on(&self, bg: Rgb) -> Style {
-        if self.monochrome() {
-            return Style::new();
+        match self.depth {
+            ColorDepth::Monochrome => Style::new(),
+            // The terminal shows its own shade of the basic color, which can
+            // be much lighter or darker than `bg`: the text has to read on that.
+            ColorDepth::Ansi16 => {
+                let (color, shade) = BASIC_COLORS[bg.to_ansi16() as usize];
+                let fg = if contrast(shade) == Rgb(20, 20, 20) {
+                    Color::Black
+                } else {
+                    Color::White
+                };
+                Style::new().bg(color).fg(fg)
+            }
+            _ => Style::new().bg(self.color(bg)).fg(self.color(contrast(bg))),
         }
-        Style::new().bg(self.color(bg)).fg(self.color(contrast(bg)))
     }
 
     /// The color of a finger zone.
@@ -267,30 +278,33 @@ impl Styles {
     }
 }
 
+/// The 16 basic colors, with the shades xterm gives them by default.
+const BASIC_COLORS: [(Color, Rgb); 16] = [
+    (Color::Black, Rgb(0, 0, 0)),
+    (Color::Red, Rgb(205, 0, 0)),
+    (Color::Green, Rgb(0, 205, 0)),
+    (Color::Yellow, Rgb(205, 205, 0)),
+    (Color::Blue, Rgb(0, 0, 238)),
+    (Color::Magenta, Rgb(205, 0, 205)),
+    (Color::Cyan, Rgb(0, 205, 205)),
+    (Color::Gray, Rgb(229, 229, 229)),
+    (Color::DarkGray, Rgb(127, 127, 127)),
+    (Color::LightRed, Rgb(255, 0, 0)),
+    (Color::LightGreen, Rgb(0, 255, 0)),
+    (Color::LightYellow, Rgb(255, 255, 0)),
+    (Color::LightBlue, Rgb(92, 92, 255)),
+    (Color::LightMagenta, Rgb(255, 0, 255)),
+    (Color::LightCyan, Rgb(0, 255, 255)),
+    (Color::White, Rgb(255, 255, 255)),
+];
+
 fn to_color(depth: ColorDepth, rgb: Rgb) -> Color {
     match depth {
         ColorDepth::Truecolor => Color::Rgb(rgb.0, rgb.1, rgb.2),
         ColorDepth::Ansi256 => Color::Indexed(rgb.to_ansi256()),
         // The named colors, written as the escape codes that every color
         // terminal understands (30 to 37 and 90 to 97).
-        ColorDepth::Ansi16 => [
-            Color::Black,
-            Color::Red,
-            Color::Green,
-            Color::Yellow,
-            Color::Blue,
-            Color::Magenta,
-            Color::Cyan,
-            Color::Gray,
-            Color::DarkGray,
-            Color::LightRed,
-            Color::LightGreen,
-            Color::LightYellow,
-            Color::LightBlue,
-            Color::LightMagenta,
-            Color::LightCyan,
-            Color::White,
-        ][rgb.to_ansi16() as usize],
+        ColorDepth::Ansi16 => BASIC_COLORS[rgb.to_ansi16() as usize].0,
         ColorDepth::Monochrome => Color::Reset,
     }
 }
@@ -455,6 +469,19 @@ mod tests {
         assert_eq!(s.color(Rgb(0, 0, 0)), Color::Black);
         // The theme still picks the highlight colors.
         assert_eq!(s.palette, dark.colors.clone().unwrap());
+        // Key labels read on the terminal's shade of the basic color: this
+        // gray is dark enough for white text, but shows as light gray.
+        let gray = Rgb(135, 135, 135);
+        assert_eq!(contrast(gray), Rgb(245, 245, 245));
+        assert_eq!(s.on(gray), Style::new().bg(Color::Gray).fg(Color::Black));
+        assert_eq!(
+            s.on(Rgb(90, 90, 90)),
+            Style::new().bg(Color::DarkGray).fg(Color::White)
+        );
+        assert_eq!(
+            s.on(Rgb::hex(0x2060c0)),
+            Style::new().bg(Color::Blue).fg(Color::White)
+        );
         let s = Styles::with_depth(dark, ColorDepth::Monochrome);
         assert!(s.monochrome() && !s.themed);
         assert_eq!(s.color(Rgb(255, 0, 0)), Color::Reset);
