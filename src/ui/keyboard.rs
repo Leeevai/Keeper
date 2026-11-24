@@ -157,6 +157,28 @@ impl<'a> KeyboardView<'a> {
         }
     }
 
+    /// The style of a key without colors: plain keys, with the key to press
+    /// and the key just pressed in reverse video.
+    fn monochrome_style(&self, shape: &KeyShape) -> Style {
+        if let Some((id, ok)) = &self.flash
+            && *id == shape.id
+        {
+            let style = Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD);
+            return if *ok {
+                style
+            } else {
+                style.add_modifier(Modifier::UNDERLINED)
+            };
+        }
+        if self.pointers.contains(&shape.id) {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else if self.is_dimmed(shape) {
+            Style::new().add_modifier(Modifier::DIM)
+        } else {
+            Style::new()
+        }
+    }
+
     fn is_dimmed(&self, shape: &KeyShape) -> bool {
         match &self.active {
             Some(active) if shape.labels.is_empty() => !self
@@ -207,8 +229,11 @@ impl Widget for KeyboardView<'_> {
             let y1 = row(shape.y + shape.h)
                 .saturating_sub(if gaps { 2 } else { 1 })
                 .max(y0);
-            let bg = self.background(shape);
-            let style = self.styles.on(bg);
+            let style = if self.styles.monochrome() {
+                self.monochrome_style(shape)
+            } else {
+                self.styles.on(self.background(shape))
+            };
             for y in y0..=y1 {
                 for x in x0..x1 {
                     if let Some(cell) = buf.cell_mut((origin.x + x, origin.y + y)) {
@@ -235,6 +260,14 @@ impl Widget for KeyboardView<'_> {
 /// The style of a key label in the list of lesson keys.
 pub fn key_style(styles: &Styles, included: bool, confidence: Option<f64>) -> Style {
     match (included, confidence) {
+        // Without colors, the keys learned to the target speed are bold.
+        (true, Some(c)) if styles.monochrome() => {
+            if c >= 1.0 {
+                styles.value
+            } else {
+                styles.text
+            }
+        }
         (true, Some(c)) => styles.on(styles.confidence_rgb(c)),
         (true, None) => styles.text,
         (false, _) => styles.dim,
@@ -247,6 +280,7 @@ mod tests {
     use crate::keyboard::Layout;
     use crate::settings::ColorMode;
     use crate::theme::Theme;
+    use ratatui::style::Color;
 
     fn render(keyboard: &Keyboard, view: KeyboardView, width: u16, height: u16) -> Buffer {
         let mut buf = Buffer::empty(Rect::new(0, 0, width, height));
@@ -322,6 +356,33 @@ mod tests {
         let buf = render(&keyboard, view, 60, 9);
         let a = (0..60).find(|&x| buf[(x, 4)].symbol() == "A").unwrap();
         assert_eq!(buf[(a, 4)].bg, pointer);
+    }
+
+    #[test]
+    fn shows_keys_without_colors() {
+        let keyboard = Keyboard::new(Layout::get("en-us"), "ansi101", "standard");
+        let styles = Styles::new(Theme::get("dark"), ColorMode::Monochrome);
+        let mut view = KeyboardView::new(&keyboard, &styles);
+        view.pointers = vec!["KeyA".into()];
+        view.flash = Some(("KeyS".into(), false));
+        let buf = render(&keyboard, view, 60, 9);
+        let find = |label: &str| (0..60).find(|&x| buf[(x, 4)].symbol() == label).unwrap();
+        let (a, s, d) = (
+            buf[(find("A"), 4)].clone(),
+            buf[(find("S"), 4)].clone(),
+            buf[(find("D"), 4)].clone(),
+        );
+        for cell in [&a, &s, &d] {
+            assert_eq!((cell.fg, cell.bg), (Color::Reset, Color::Reset));
+        }
+        assert!(a.modifier.contains(Modifier::REVERSED));
+        assert!(
+            s.modifier
+                .contains(Modifier::REVERSED | Modifier::UNDERLINED)
+        );
+        assert!(!d.modifier.contains(Modifier::REVERSED));
+        assert_eq!(key_style(&styles, true, Some(1.0)), styles.value);
+        assert_eq!(key_style(&styles, true, Some(0.2)), styles.text);
     }
 
     #[test]

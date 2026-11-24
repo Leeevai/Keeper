@@ -126,6 +126,34 @@ impl Rgb {
             16 + 36 * r + 6 * g + b
         }
     }
+
+    /// The closest of the 16 basic terminal colors, 0 to 15. Terminals
+    /// choose their own shades for these, so the match goes by hue and
+    /// lightness instead of by distance to some particular palette: a muted
+    /// green stays green instead of turning gray.
+    pub fn to_ansi16(self) -> u8 {
+        let max = self.0.max(self.1).max(self.2);
+        let min = self.0.min(self.1).min(self.2);
+        let (h, _, l) = self.to_hsl();
+        if max - min < 40 {
+            return match l {
+                l if l < 0.2 => 0,  // black
+                l if l < 0.5 => 8,  // dark gray
+                l if l < 0.85 => 7, // gray
+                _ => 15,            // white
+            };
+        }
+        // Red, yellow, green, cyan, blue and magenta, every 60 degrees.
+        let base = match ((h * 6.0 + 0.5) as u8) % 6 {
+            0 => 1,
+            1 => 3,
+            2 => 2,
+            3 => 6,
+            4 => 4,
+            _ => 5,
+        };
+        if l > 0.6 { base + 8 } else { base }
+    }
 }
 
 /// The colors of a theme. The `system` theme has no colors and uses the
@@ -303,6 +331,26 @@ mod tests {
         assert_eq!(Rgb(255, 255, 255).to_ansi256(), 231);
         assert_eq!(Rgb(255, 0, 0).to_ansi256(), 196);
         assert_eq!(Rgb(128, 128, 128).to_ansi256(), 244);
+    }
+
+    #[test]
+    fn basic_terminal_colors() {
+        assert_eq!(Rgb(0, 0, 0).to_ansi16(), 0);
+        assert_eq!(Rgb(90, 90, 90).to_ansi16(), 8);
+        assert_eq!(Rgb(160, 160, 160).to_ansi16(), 7);
+        assert_eq!(Rgb(250, 250, 250).to_ansi16(), 15);
+        assert_eq!(Rgb::hex(0xcc0000).to_ansi16(), 1);
+        assert_eq!(Rgb::hex(0xff6666).to_ansi16(), 9);
+        // The fast key green of the light theme, a muted green.
+        assert_eq!(Rgb::hex(0x60d788).to_ansi16(), 10);
+        assert_eq!(Rgb::hex(0x448154).to_ansi16(), 2);
+        assert_eq!(Rgb::hex(0xcc8b00).to_ansi16(), 3);
+        assert_eq!(Rgb::hex(0x2060c0).to_ansi16(), 4);
+        assert_eq!(Rgb::hex(0x20b0b0).to_ansi16(), 6);
+        assert_eq!(Rgb::hex(0xa040a0).to_ansi16(), 5);
+        for v in 0..=255u8 {
+            assert!(Rgb(v, 255 - v, v / 2).to_ansi16() < 16);
+        }
     }
 
     #[test]
