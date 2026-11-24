@@ -30,6 +30,8 @@ lessons with `cargo test`:
 """
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "assets" / "code" / "keeper"
@@ -1164,21 +1166,30 @@ language("haskell", "Haskell", rules={
 # ---------------------------------------------------------------------------
 
 
-def write(name, rules):
-    text = json.dumps(rules, ensure_ascii=False)
-    (OUT / f"{name}.json").write_text(text + "\n", encoding="utf-8")
+def write(name, text):
+    """Writes a file whole or not at all: an interrupted run, or two runs at
+    once, never leave half a file for the build to embed."""
+    fd, temp = tempfile.mkstemp(dir=OUT, prefix=f".{name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+        os.chmod(temp, 0o644)
+        os.replace(temp, OUT / f"{name}.json")
+    except BaseException:
+        os.unlink(temp)
+        raise
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    write("_names", NAMES)
+    write("_names", json.dumps(NAMES, ensure_ascii=False))
     syntaxes = []
     for id, name, rules in LANGUAGES:
-        write(f"lang_{id}", rules)
+        write(f"lang_{id}", json.dumps(rules, ensure_ascii=False))
         grammar = [f"lang_{id}", "_names"] + SHARED
         syntaxes.append({"id": id, "name": name, "grammar": grammar, "start": "start"})
-    text = json.dumps(syntaxes, indent=2, ensure_ascii=False)
-    (OUT / "syntaxes.json").write_text(text + "\n", encoding="utf-8")
+    # The list goes last, so that it never names a grammar not yet written.
+    write("syntaxes", json.dumps(syntaxes, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
