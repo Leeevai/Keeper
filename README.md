@@ -84,7 +84,7 @@ The settings keep keybr's names, defaults and ranges.
 - **Lessons**: guided lessons, common words, books (6 classics in 4 languages), custom
   text with its own editor, source code in 24 syntaxes (C/C++, C#, CSS, Dart, Elixir, Go,
   Haskell, HTML, Java, JavaScript, Kotlin, Lua, PHP, Laravel, Python, Regex, Ruby, Rust,
-  Shell, SQL, Swift, TypeScript) and numbers.
+  Shell, SQL, Swift, TypeScript), your own code (see below) and numbers.
   Natural words, keyboard order, unlocking more letters, recovering keys, word list size,
   capitals, punctuation, repeated words, lesson length, target speed and daily goal.
 - **Typing**: stop the cursor on errors, forgive errors, space skips words, cursor shape
@@ -113,6 +113,24 @@ Keeper detects how many colors your terminal shows, and you can choose in the se
 - **No color** shows typed text dimmed, errors underlined, and the caret and the next
   key in reverse video. Keeper picks this when `NO_COLOR` is set or `TERM` is `dumb`; a
   color mode chosen in the settings wins over `NO_COLOR`.
+
+### Your own code
+
+The **Your code** lessons are lines of your own source files, a few at a time and
+without indentation, so you practice the names, brackets and operators you actually
+type. Choose a file or folder in the settings, or start Keeper with it:
+
+```bash
+keeper code ~/projects/my-app/src
+```
+
+In a folder, Keeper reads the source files of common languages and skips hidden folders,
+dependencies and build output (`node_modules`, `target`, `vendor`, `build`, `dist` and
+so on), binary files, files over 256 KB and lines over 120 characters. Lines with a
+character your keyboard layout cannot type are left out, and a lesson stays within one
+file. If the path cannot be read, or holds no code to practice, the lesson says so and
+practices the selected code syntax instead. Keeper reads the files when you choose them
+and when it starts, so edits you make while it is open show up after a restart.
 
 ## Your data
 

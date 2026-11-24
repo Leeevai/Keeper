@@ -930,6 +930,40 @@ mod tests {
     }
 
     #[test]
+    fn choosing_another_folder_reloads_your_code() {
+        let (mut app, _dir) = app();
+        let lesson_text = |app: &App| -> String {
+            app.practice
+                .input
+                .remaining()
+                .iter()
+                .map(|&c| char::from_u32(c).unwrap())
+                .collect()
+        };
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        std::fs::write(first.path().join("a.rs"), "let first_folder = 1;\n").unwrap();
+        std::fs::write(second.path().join("b.rs"), "let second_folder = 2;\n").unwrap();
+        let mut s = app.settings.clone();
+        s.lesson_type = crate::settings::LessonType::Files;
+        s.files_path = first.path().display().to_string();
+        app.apply_settings(s.clone());
+        assert!(
+            lesson_text(&app).contains("first_folder"),
+            "{}",
+            lesson_text(&app)
+        );
+        s.files_path = second.path().display().to_string();
+        assert!(lesson_changed(&app.settings, &s));
+        app.apply_settings(s);
+        assert!(
+            lesson_text(&app).contains("second_folder"),
+            "{}",
+            lesson_text(&app)
+        );
+    }
+
+    #[test]
     fn only_lesson_settings_regenerate_the_lesson() {
         let a = Settings::default();
         assert!(!lesson_changed(

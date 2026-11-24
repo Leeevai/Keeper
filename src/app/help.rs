@@ -75,6 +75,13 @@ pub fn render(frame: &mut Frame, area: Rect, ctx: &RenderContext, app: &App) {
             app.storage.dir().display()
         )),
         p(""),
+        h("Your own code"),
+        p(
+            "Choose Your code as the lesson type in the settings, then a file or folder of your code, or \
+             start Keeper with `keeper code <file or folder>`. Lessons are a few lines of your source files \
+             at a time, without indentation.",
+        ),
+        p(""),
         h("Credits"),
         p(
             "Keeper is a terminal port of keybr.com by Aliaksandr Radzivanovich (github.com/aradzie/keybr.com). \

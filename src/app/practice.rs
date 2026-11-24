@@ -12,7 +12,7 @@ use super::{InputAction, RenderContext};
 use crate::keyboard::Keyboard;
 use crate::lesson::{LearningRate, Lesson, LessonKeys, Target};
 use crate::result::{
-    DailyGoal, KeyStatsMap, StreakList, SummaryStats, TypingResult, time_to_speed,
+    DailyGoal, KeyStatsMap, StreakList, SummaryStats, TextType, TypingResult, time_to_speed,
 };
 use crate::rng::Lcg;
 use crate::settings::{Emulation, Settings, View};
@@ -176,6 +176,12 @@ impl Practice {
     }
 
     /// The code points of the lesson, used to dim the other keys.
+    /// Whether the lesson text reads right to left. Code reads left to
+    /// right, whatever the language.
+    pub fn right_to_left(&self) -> bool {
+        self.lesson.language.is_rtl() && self.lesson.lesson_type.text_type() != TextType::Code
+    }
+
     fn active_code_points(&self) -> HashSet<u32> {
         let mut set: HashSet<u32> = self.lesson_keys.included().map(|k| k.letter.cp).collect();
         set.insert(0x20);
@@ -196,8 +202,7 @@ impl Practice {
             styles: ctx.styles,
             whitespace: ctx.settings.whitespace_style,
             caret: ctx.settings.caret_shape,
-            rtl: self.lesson.language.is_rtl()
-                && !matches!(self.lesson.lesson_type, crate::settings::LessonType::Code),
+            rtl: self.right_to_left(),
             typo: self.input.has_typo(),
         };
         let text_height = text_view.height(text_width).max(3);
@@ -269,6 +274,12 @@ impl Practice {
             .border_type(BorderType::Rounded)
             .border_style(ctx.styles.border)
             .title(Span::styled(title, ctx.styles.name));
+        let block = match &self.lesson.notice {
+            Some(notice) => {
+                block.title_bottom(Span::styled(format!(" {notice} "), ctx.styles.error))
+            }
+            None => block,
+        };
         let inner = block.inner(box_area);
         frame.render_widget(block, box_area);
         let inner = Rect {
@@ -482,7 +493,6 @@ impl Practice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::result::TextType;
     use crate::settings::SpeedUnit;
 
     fn type_all(p: &mut Practice, start: f64) -> f64 {
@@ -511,6 +521,22 @@ mod tests {
         assert!(events.is_empty() || events.iter().all(|e| e.starts_with("New key")));
         p.next_lesson();
         assert!(!p.completed());
+    }
+
+    #[test]
+    fn code_reads_left_to_right_in_every_language() {
+        use crate::settings::LessonType;
+        let hebrew = |lesson_type| Settings {
+            language: "he".into(),
+            layout: "he-il".into(),
+            lesson_type,
+            ..Settings::default()
+        };
+        let rtl = |lesson_type| Practice::new(&hebrew(lesson_type), &[]).right_to_left();
+        assert!(rtl(LessonType::Guided));
+        assert!(!rtl(LessonType::Code));
+        assert!(!rtl(LessonType::Files));
+        assert!(!Practice::new(&Settings::default(), &[]).right_to_left());
     }
 
     #[test]
