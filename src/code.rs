@@ -84,6 +84,8 @@ impl Syntax {
             let keeper: Vec<SyntaxData> =
                 serde_json::from_str(assets::KEEPER_SYNTAXES_JSON).expect("keeper/syntaxes.json");
             data.extend(keeper);
+            // In the settings, keybr's and Keeper's syntaxes are listed together.
+            data.sort_by_key(|d| d.name.to_lowercase());
             data.into_iter()
                 .map(|d| {
                     let grammar: Vec<&'static Rules> =
@@ -332,6 +334,11 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), Syntax::all().len(), "every syntax id is unique");
+        let names: Vec<String> = Syntax::all()
+            .iter()
+            .map(|s| s.name.to_lowercase())
+            .collect();
+        assert!(names.is_sorted(), "{names:?}");
         let all_flags: HashSet<String> = FLAGS.iter().map(|s| s.to_string()).collect();
         for syntax in Syntax::all() {
             for flags in [HashSet::new(), all_flags.clone()] {
