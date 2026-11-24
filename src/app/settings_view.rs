@@ -593,7 +593,7 @@ impl Field {
             KeyboardPointers => "Highlight the key that must be pressed next. Use this option to quickly find a key if you don't know the keyboard layout well.".into(),
             SpeedUnit => "For the purpose of typing measurement, each word is standardized to be five characters or keystrokes, including spaces and punctuation.".into(),
             Theme => "The colors of the interface. The system theme uses the colors of your terminal.".into(),
-            ColorMode => "Keeper detects whether your terminal shows 24-bit colors. Choose 256 colors if the colors look wrong.".into(),
+            ColorMode => "Keeper detects how many colors your terminal shows, and turns colors off when NO_COLOR is set. Choose fewer colors if they look wrong. With 16 colors the terminal's own background is used; with no color, typed text is dim, errors are underlined and the next key is in reverse video.".into(),
             View => "The normal view shows the statistics and the keyboard, the compact view hides the keyboard, the bare view shows only the text. Ctrl+V switches views while practicing.".into(),
             TestDuration => "How long the typing test lasts, by time or by number of characters.".into(),
             TestSource => "Where the text of the typing test comes from.".into(),
