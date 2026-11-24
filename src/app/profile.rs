@@ -1238,7 +1238,16 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn page_text(profile: &Profile, results: &[TypingResult], width: u16) -> String {
-        let styles = Styles::new(Theme::get("dark"), ColorMode::Truecolor);
+        page_text_in(ColorMode::Truecolor, profile, results, width)
+    }
+
+    fn page_text_in(
+        mode: ColorMode,
+        profile: &Profile,
+        results: &[TypingResult],
+        width: u16,
+    ) -> String {
+        let styles = Styles::new(Theme::get("dark"), mode);
         let settings = Settings::default();
         let ctx = RenderContext {
             styles: &styles,
@@ -1351,6 +1360,28 @@ mod tests {
             profile.handle_key(key(KeyCode::Esc), &results),
             ProfileAction::Back
         );
+    }
+
+    #[test]
+    fn charts_draw_dotted_targets_without_colors() {
+        // The dots between a chart's title and the next section's title.
+        let dots = |mode, title: &str, next: &str| {
+            let text = page_text_in(mode, &Profile::default(), &history(), 110);
+            let lines: Vec<&str> = text.lines().collect();
+            let start = lines.iter().position(|l| l.contains(title)).unwrap();
+            let end = lines.iter().position(|l| l.contains(next)).unwrap();
+            lines[start..end]
+                .iter()
+                .map(|l| l.matches('•').count())
+                .sum::<usize>()
+        };
+        for (title, next) in [
+            ("╭ Typing Speed ", "╭ Learning Progress Overview"),
+            ("╭ Key Typing Speed: ", "╭ Key Typing Speed Histogram"),
+        ] {
+            assert!(dots(ColorMode::Monochrome, title, next) > 20, "{title}");
+            assert_eq!(dots(ColorMode::Truecolor, title, next), 0, "{title}");
+        }
     }
 
     #[test]

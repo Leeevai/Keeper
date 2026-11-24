@@ -44,8 +44,7 @@ impl ColorDepth {
                 let term = var("TERM").unwrap_or_default();
                 // TERM names a terminal that cannot do more, which wins over
                 // a COLORTERM passed along from another terminal.
-                if term == "dumb" || term.starts_with("vt") {
-                    // The VT100 and VT220 show no colors.
+                if term == "dumb" || colorless_vt(&term) {
                     ColorDepth::Monochrome
                 } else if term == "linux"
                     || term == "ansi"
@@ -68,6 +67,17 @@ impl ColorDepth {
             }
         }
     }
+}
+
+/// Whether TERM names one of the VT terminals without colors, such as the
+/// VT100, VT220 or `vt100-am`; not the VT525, which has colors, nor VTE
+/// terminals (`vte-256color`).
+fn colorless_vt(term: &str) -> bool {
+    let model = term.split('-').next().unwrap_or("");
+    matches!(
+        model,
+        "vt52" | "vt100" | "vt102" | "vt220" | "vt320" | "vt420"
+    )
 }
 
 /// The styles of every UI element, resolved from a theme.
@@ -446,6 +456,11 @@ mod tests {
         assert_eq!(detect(auto, &[("TERM", "linux")]), Ansi16);
         assert_eq!(detect(auto, &[("TERM", "vt220")]), Monochrome);
         assert_eq!(detect(auto, &[("TERM", "vt100")]), Monochrome);
+        assert_eq!(detect(auto, &[("TERM", "vt100-am")]), Monochrome);
+        // VTE terminals and the VT525 have colors.
+        assert_eq!(detect(auto, &[("TERM", "vte-256color")]), Ansi256);
+        assert_eq!(detect(auto, &[("TERM", "vte")]), Ansi256);
+        assert_eq!(detect(auto, &[("TERM", "vt525")]), Ansi256);
         // TERM wins over a COLORTERM passed along from another terminal.
         let console = [("TERM", "linux"), ("COLORTERM", "truecolor")];
         assert_eq!(detect(auto, &console), Ansi16);
