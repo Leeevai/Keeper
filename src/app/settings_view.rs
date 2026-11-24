@@ -315,8 +315,9 @@ impl Field {
             FilesPath if s.files_path.is_empty() => "Not set (Enter to choose)".into(),
             FilesPath => {
                 // The end of a long path says the most.
-                let n = s.files_path.chars().count();
-                let path: String = s.files_path.chars().skip(n.saturating_sub(40)).collect();
+                let shown = crate::files::printable(&s.files_path);
+                let n = shown.chars().count();
+                let path: String = shown.chars().skip(n.saturating_sub(40)).collect();
                 let more = if n > 40 { "…" } else { "" };
                 format!("{more}{path} (Enter to edit)")
             }

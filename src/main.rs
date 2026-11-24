@@ -80,9 +80,16 @@ fn main() -> Result<()> {
         Some(Command::Code { path }) => {
             let path = std::fs::canonicalize(&path)
                 .with_context(|| format!("cannot open {}", path.display()))?;
+            // The settings keep the path as text, so it has to be one.
+            let Some(text) = path.to_str() else {
+                anyhow::bail!(
+                    "{} is not valid UTF-8; rename it or choose another folder",
+                    path.display()
+                );
+            };
             let mut settings = storage.load_settings();
             settings.lesson_type = LessonType::Files;
-            settings.files_path = path.display().to_string();
+            settings.files_path = text.to_string();
             storage.save_settings(&settings)?;
             run(storage)
         }

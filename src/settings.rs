@@ -599,7 +599,6 @@ impl Settings {
             .unwrap_or("")
             .trim()
             .chars()
-            .take(1000)
             .collect();
         if crate::content::Book::find(&self.book).is_none() {
             self.book = d_book();

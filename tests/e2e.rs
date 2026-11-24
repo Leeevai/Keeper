@@ -634,6 +634,27 @@ fn survives_resizing() {
     assert!(term.quit());
 }
 
+/// macOS keeps file names in UTF-8, so the test runs where it can make one.
+#[cfg(target_os = "linux")]
+#[test]
+fn keeper_code_rejects_paths_that_are_not_utf8() {
+    use std::os::unix::ffi::OsStrExt;
+    let home = tempfile::tempdir().unwrap();
+    let dir = home.path().join(std::ffi::OsStr::from_bytes(b"code\xff"));
+    std::fs::create_dir(&dir).unwrap();
+    let out = Command::new(BIN)
+        .arg("code")
+        .arg(&dir)
+        .env("KEEPER_HOME", home.path())
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("is not valid UTF-8"),
+        "{err}"
+    );
+}
+
 fn keeper(home: &Path, args: &[&str]) -> (bool, String) {
     let out = Command::new(BIN)
         .args(args)
