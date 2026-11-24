@@ -63,5 +63,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "lua",
+    "name": "Lua",
+    "grammar": [
+      "lang_lua",
+      "_names",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]

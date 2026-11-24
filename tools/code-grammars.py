@@ -803,6 +803,113 @@ language("elixir", "Elixir", rules={
 
 
 # ---------------------------------------------------------------------------
+# Lua
+
+language("lua", "Lua", rules={
+    "start": ref("lua_statement"),
+    "lua_statement": alt(
+        ref("lua_local"),
+        ref("lua_local"),
+        ref("lua_assign"),
+        flag("defs", ref("lua_function")),
+        ref("lua_if"),
+        ref("lua_for"),
+        ref("lua_while"),
+        ref("lua_call"),
+        ref("lua_return"),
+        flag("comments", ref("lua_comment")),
+    ),
+    "lua_local": seq(
+        kw("local"), SP, ref("lua_name"), opt(seq(",", SP, ref("lua_name")), 0.2),
+        SP, "=", SP, ref("lua_expression"),
+    ),
+    "lua_assign": seq(
+        alt(
+            ref("lua_name"),
+            seq(ref("lua_name"), ".", ref("lua_name")),
+            seq(ref("lua_name"), "[", ref("lua_key"), "]"),
+        ),
+        SP, "=", SP, ref("lua_expression"),
+    ),
+    "lua_key": alt(ref("lua_name"), flag("numbers", ref("lua_int")), flag("strings", ref("lua_string"))),
+    "lua_function": alt(
+        seq(
+            opt(seq(kw("local"), SP), 0.4), kw("function"), SP, ref("lua_function_name"),
+            "(", opt(ref("lua_params")), ")", SP, ref("lua_body"), SP, kw("end"),
+        ),
+        seq(
+            kw("function"), SP, ref("lua_class_name"), alt(".", ":"), ref("lua_function_name"),
+            "(", opt(ref("lua_params")), ")", SP, ref("lua_body"), SP, kw("end"),
+        ),
+    ),
+    "lua_params": alt(seq(ref("lua_name"), opt(seq(",", SP, ref("lua_name")))), "..."),
+    "lua_body": alt(ref("lua_return"), ref("lua_call"), ref("lua_local")),
+    "lua_if": seq(
+        kw("if"), SP, ref("lua_condition"), SP, kw("then"), SP, ref("lua_call"),
+        opt(seq(SP, kw("elseif"), SP, ref("lua_condition"), SP, kw("then"), SP, ref("lua_call")), 0.3),
+        opt(seq(SP, kw("else"), SP, ref("lua_call")), 0.4), SP, kw("end"),
+    ),
+    "lua_for": alt(
+        flag("numbers", seq(
+            kw("for"), SP, ref("lua_name"), SP, "=", SP, ref("lua_int"), ",", SP,
+            alt(ref("lua_int"), seq("#", ref("lua_name"))), SP, kw("do"), SP, ref("lua_call"), SP, kw("end"),
+        )),
+        seq(
+            kw("for"), SP, alt("k, v", "i, v", "_, item", "key, value"), SP, kw("in"), SP,
+            alt("pairs", "ipairs"), "(", ref("lua_name"), ")", SP, kw("do"), SP, ref("lua_call"), SP, kw("end"),
+        ),
+    ),
+    "lua_while": seq(kw("while"), SP, ref("lua_condition"), SP, kw("do"), SP, ref("lua_assign"), SP, kw("end")),
+    "lua_call": alt(
+        seq(alt("print", "table.insert", "assert", "error", "string.format", "table.concat"), "(", ref("lua_args"), ")"),
+        seq(ref("lua_name"), ":", ref("lua_function_name"), "(", opt(ref("lua_args")), ")"),
+        seq(ref("lua_function_name"), "(", opt(ref("lua_args")), ")"),
+    ),
+    "lua_args": seq(ref("lua_simple"), opt(seq(",", SP, ref("lua_simple")))),
+    "lua_return": seq(kw("return"), SP, ref("lua_expression")),
+    "lua_condition": alt(
+        seq(ref("lua_name"), SP, alt("==", "~=", ">", "<", ">=", "<="), SP, ref("lua_literal")),
+        seq(kw("not"), SP, ref("lua_name")),
+        seq(ref("lua_name"), SP, alt(kw("and"), kw("or")), SP, ref("lua_name")),
+        seq("#", ref("lua_name"), SP, ">", SP, ref("lua_int_or_name")),
+    ),
+    "lua_expression": alt(
+        ref("lua_literal"),
+        ref("lua_name"),
+        ref("lua_call"),
+        ref("lua_table"),
+        binary("lua_name", ["+", "-", "*", "/", "%", "..", "//"], "lua_expression"),
+        seq(ref("lua_name"), SP, kw("or"), SP, ref("lua_literal")),
+        seq("#", ref("lua_name")),
+        seq(kw("function"), "(", ref("lua_name"), ")", SP, kw("return"), SP, ref("lua_name"), SP, kw("end")),
+    ),
+    "lua_simple": alt(ref("lua_literal"), ref("lua_name"), seq(ref("lua_name"), ".", ref("lua_name"))),
+    "lua_table": alt(
+        "{}",
+        seq("{", SP, ref("lua_field"), opt(seq(",", SP, ref("lua_field"))), SP, "}"),
+    ),
+    "lua_field": alt(seq(ref("lua_name"), SP, "=", SP, ref("lua_literal")), ref("lua_literal")),
+    "lua_literal": alt(
+        flag("numbers", ref("lua_number")),
+        flag("strings", ref("lua_string")),
+        kw("nil"), kw("true"), kw("false"),
+    ),
+    "lua_number": number(alt(ref("integer_dec_literal"), ref("float_dec_literal"), ref("integer_hex_literal_2"))),
+    "lua_int": number(ref("integer_dec_literal")),
+    "lua_int_or_name": alt(flag("numbers", ref("lua_int")), ref("lua_name")),
+    "lua_string": string(alt(
+        seq('"', ref("generic_string_content"), '"'),
+        seq("'", ref("generic_string_content"), "'"),
+        seq("[[", ref("generic_string_content"), "]]"),
+    )),
+    "lua_name": ref("generic_variable_name"),
+    "lua_function_name": ref("snake_function_name"),
+    "lua_class_name": ref("generic_class_name"),
+    "lua_comment": comment(seq("-- ", ref("comment_text"))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):

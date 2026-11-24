@@ -404,6 +404,7 @@ mod tests {
         ("dart", &["final ", "=> ", "?? "]),
         ("ruby", &["def ", " end", "do |"]),
         ("elixir", &["defmodule ", "|> ", " do "]),
+        ("lua", &["local ", " then ", " end"]),
     ];
 
     #[test]

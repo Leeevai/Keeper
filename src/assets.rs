@@ -127,6 +127,10 @@ pub const GRAMMARS: &[(&str, &str)] = &[
         "lang_elixir",
         include_str!("../assets/code/keeper/lang_elixir.json"),
     ),
+    (
+        "lang_lua",
+        include_str!("../assets/code/keeper/lang_lua.json"),
+    ),
 ];
 
 /// Code syntaxes written for Keeper, listed after keybr.com's.
