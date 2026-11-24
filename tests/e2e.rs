@@ -279,6 +279,65 @@ fn escape_restarts_and_ctrl_n_skips() {
 }
 
 #[test]
+fn practices_your_own_code() {
+    let home = tempfile::tempdir().unwrap();
+    let code = tempfile::tempdir().unwrap();
+    let lines: Vec<String> = (0..30)
+        .map(|i| format!("total += item{i}.price * {i};"))
+        .collect();
+    std::fs::create_dir_all(code.path().join("src")).unwrap();
+    std::fs::write(code.path().join("src/cart.js"), lines.join("\n\t")).unwrap();
+    // Dependencies and hidden folders are not your code.
+    std::fs::create_dir_all(code.path().join("node_modules/dep")).unwrap();
+    std::fs::write(
+        code.path().join("node_modules/dep/index.js"),
+        "dependency();\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(code.path().join(".git")).unwrap();
+    std::fs::write(code.path().join(".git/hook.sh"), "hidden\n").unwrap();
+    let settings = serde_json::json!({
+        "lesson.type": "files",
+        "lesson.files.path": code.path().display().to_string(),
+    });
+    std::fs::write(home.path().join("settings.json"), settings.to_string()).unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(term.screen().contains("Your code"), "{}", term.screen());
+    let lesson = term.box_text();
+    assert!(lesson.starts_with("total += item"), "{lesson}");
+    assert!(!lesson.contains("dependency") && !lesson.contains("hidden"));
+    term.type_text(&lesson, Duration::from_millis(40));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    let result: serde_json::Value = serde_json::from_str(results.lines().next().unwrap()).unwrap();
+    assert_eq!(result["textType"], "code", "{results}");
+    assert_eq!(result["errors"], 0, "{lesson}");
+    assert!(term.quit());
+
+    // A path that cannot be read says so, and practices generated code
+    // instead; so does a folder without code.
+    std::fs::create_dir(code.path().join("empty")).unwrap();
+    for (folder, notice) in [
+        ("missing", "Cannot read"),
+        ("empty", "No code to practice in"),
+    ] {
+        let settings = serde_json::json!({
+            "lesson.type": "files",
+            "lesson.files.path": code.path().join(folder).display().to_string(),
+        });
+        std::fs::write(home.path().join("settings.json"), settings.to_string()).unwrap();
+        let mut term = Term::start(home.path(), 40, 110);
+        assert!(term.screen().contains(notice), "{}", term.screen());
+        assert!(term.box_text().chars().count() > 20);
+        assert!(term.quit());
+    }
+}
+
+#[test]
 fn every_screen_renders() {
     let home = tempfile::tempdir().unwrap();
     let mut term = Term::start(home.path(), 42, 130);
@@ -466,6 +525,37 @@ fn emulates_colemak_on_a_qwerty_system() {
 }
 
 #[test]
+fn practices_code_in_a_language_written_for_keeper() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("settings.json"),
+        r#"{"lesson.type": "code", "lesson.code.syntax": "kotlin"}"#,
+    )
+    .unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(
+        term.screen()
+            .contains("Source code · Kotlin · United States"),
+        "{}",
+        term.screen()
+    );
+    let lesson = term.box_text();
+    assert!(lesson.chars().count() > 20, "{lesson}");
+    // Brackets, quotes and operators are typed as shown.
+    term.type_text(&lesson, Duration::from_millis(40));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    let result: serde_json::Value = serde_json::from_str(results.lines().next().unwrap()).unwrap();
+    assert_eq!(result["textType"], "code", "{results}");
+    assert_eq!(result["errors"], 0, "{lesson}");
+    assert!(term.quit());
+}
+
+#[test]
 fn practicing_another_language_with_its_own_letters() {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(
@@ -584,6 +674,19 @@ fn survives_resizing() {
     assert!(term.quit());
 }
 
+/// The row and column of the first character of the lesson text.
+fn first_text_cell(term: &Term) -> (u16, u16) {
+    let screen = term.screen();
+    let lines: Vec<&str> = screen.lines().collect();
+    let top = lines
+        .iter()
+        .position(|l| l.contains('╭'))
+        .expect("a text box");
+    let left = lines[top].chars().position(|c| c == '╭').unwrap();
+    // The text starts after the border and one column of padding.
+    (top as u16 + 1, left as u16 + 2)
+}
+
 /// Every cell of the screen, as (row, column, cell).
 fn cells(term: &Term) -> Vec<(u16, u16, vt100::Cell)> {
     let screen = term.parser.screen();
@@ -615,21 +718,27 @@ fn turns_colors_off_with_no_color() {
         "colored cells: {colored:?}\n{}",
         term.screen()
     );
-    // The caret and the key to press are in reverse video.
-    let reversed = cells(&term).iter().filter(|(_, _, c)| c.inverse()).count();
-    assert!(reversed >= 2, "{}", term.screen());
-    // A wrong key is underlined in the text.
+    // The caret, on the first character of the lesson, is in reverse video.
     let lesson = term.box_text();
-    let wrong = if lesson.starts_with('q') { "z" } else { "q" };
+    let first = lesson.chars().next().unwrap();
+    let (row, col) = first_text_cell(&term);
+    let caret = term.parser.screen().cell(row, col).unwrap().clone();
+    assert_eq!(caret.contents(), first.to_string(), "{}", term.screen());
+    assert!(caret.inverse() && !caret.underline(), "{}", term.screen());
+    // So is the key to press, below the text.
+    let label = first.to_uppercase().to_string();
+    let key = cells(&term)
+        .into_iter()
+        .find(|(r, _, c)| *r > row + 1 && c.contents() == label)
+        .expect("the key on the keyboard");
+    assert!(key.2.inverse(), "{}", term.screen());
+    // A wrong key stops the caret and underlines it.
+    let wrong = if first == 'q' { "z" } else { "q" };
     term.type_text(wrong, Duration::from_millis(60));
     term.pump(Duration::from_millis(200));
-    assert!(
-        cells(&term)
-            .iter()
-            .any(|(_, _, c)| c.underline() && c.bold()),
-        "{}",
-        term.screen()
-    );
+    let caret = term.parser.screen().cell(row, col).unwrap().clone();
+    assert_eq!(caret.contents(), first.to_string());
+    assert!(caret.inverse() && caret.underline(), "{}", term.screen());
     assert!(term.quit());
 }
 
@@ -656,6 +765,27 @@ fn uses_the_basic_colors_on_the_linux_console() {
     // The keyboard still shows its key colors.
     assert!(colors.len() >= 3, "{colors:?}");
     assert!(term.quit());
+}
+
+/// macOS keeps file names in UTF-8, so the test runs where it can make one.
+#[cfg(target_os = "linux")]
+#[test]
+fn keeper_code_rejects_paths_that_are_not_utf8() {
+    use std::os::unix::ffi::OsStrExt;
+    let home = tempfile::tempdir().unwrap();
+    let dir = home.path().join(std::ffi::OsStr::from_bytes(b"code\xff"));
+    std::fs::create_dir(&dir).unwrap();
+    let out = Command::new(BIN)
+        .arg("code")
+        .arg(&dir)
+        .env("KEEPER_HOME", home.path())
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("is not valid UTF-8"),
+        "{err}"
+    );
 }
 
 fn keeper(home: &Path, args: &[&str]) -> (bool, String) {
@@ -708,6 +838,8 @@ fn command_line() {
     assert_eq!(exported[0]["histogram"].as_array().unwrap().len(), 3);
     let (ok, _) = keeper(home.path(), &["import", "/nonexistent"]);
     assert!(!ok);
+    let (ok, out) = keeper(home.path(), &["code", "/nonexistent"]);
+    assert!(!ok && out.contains("cannot open /nonexistent"), "{out}");
     let (ok, out) = keeper(home.path(), &["--help"]);
     assert!(ok && out.contains("typing tutor"), "{out}");
 }

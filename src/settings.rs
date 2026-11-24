@@ -19,15 +19,18 @@ pub enum LessonType {
     Custom,
     Code,
     Numbers,
+    /// Lines of the user's own source files.
+    Files,
 }
 
 impl LessonType {
-    pub const ALL: [LessonType; 6] = [
+    pub const ALL: [LessonType; 7] = [
         LessonType::Guided,
         LessonType::Wordlist,
         LessonType::Books,
         LessonType::Custom,
         LessonType::Code,
+        LessonType::Files,
         LessonType::Numbers,
     ];
 
@@ -39,6 +42,7 @@ impl LessonType {
             LessonType::Custom => "Custom text",
             LessonType::Code => "Source code",
             LessonType::Numbers => "Numbers",
+            LessonType::Files => "Your code",
         }
     }
 
@@ -46,7 +50,7 @@ impl LessonType {
         match self {
             LessonType::Guided => TextType::Generated,
             LessonType::Wordlist | LessonType::Books | LessonType::Custom => TextType::Natural,
-            LessonType::Code => TextType::Code,
+            LessonType::Code | LessonType::Files => TextType::Code,
             LessonType::Numbers => TextType::Numbers,
         }
     }
@@ -477,6 +481,9 @@ pub struct Settings {
     pub code_syntax: String,
     #[serde(rename = "lesson.code.flags", default)]
     pub code_flags: Vec<String>,
+    /// A source file, or a folder of them, for lessons of your own code.
+    #[serde(rename = "lesson.files.path", default)]
+    pub files_path: String,
     /// 0 to 1, the share of capitalized words.
     #[serde(rename = "lesson.capitals", default)]
     pub capitals: f64,
@@ -622,6 +629,14 @@ impl Settings {
         if self.custom_text.chars().count() > 10_000 {
             self.custom_text = self.custom_text.chars().take(10_000).collect();
         }
+        self.files_path = self
+            .files_path
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .collect();
         if crate::content::Book::find(&self.book).is_none() {
             self.book = d_book();
         }

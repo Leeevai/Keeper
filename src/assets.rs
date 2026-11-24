@@ -71,27 +71,85 @@ pub fn book_json(id: &str) -> Option<&'static str> {
     }
 }
 
+/// The rules of every code grammar: keybr.com's, extracted by the tool, and
+/// Keeper's own in `assets/code/keeper`, which the tool leaves alone.
+pub const GRAMMARS: &[(&str, &str)] = &[
+    ("_comments", include_str!("../assets/code/_comments.json")),
+    ("_ident", include_str!("../assets/code/_ident.json")),
+    ("_keywords", include_str!("../assets/code/_keywords.json")),
+    ("_literals", include_str!("../assets/code/_literals.json")),
+    ("lang_cpp", include_str!("../assets/code/lang_cpp.json")),
+    (
+        "lang_csharp",
+        include_str!("../assets/code/lang_csharp.json"),
+    ),
+    ("lang_go", include_str!("../assets/code/lang_go.json")),
+    (
+        "lang_html_css",
+        include_str!("../assets/code/lang_html_css.json"),
+    ),
+    ("lang_java", include_str!("../assets/code/lang_java.json")),
+    (
+        "lang_javascript",
+        include_str!("../assets/code/lang_javascript.json"),
+    ),
+    ("lang_php", include_str!("../assets/code/lang_php.json")),
+    (
+        "lang_python",
+        include_str!("../assets/code/lang_python.json"),
+    ),
+    ("lang_regex", include_str!("../assets/code/lang_regex.json")),
+    ("lang_rust", include_str!("../assets/code/lang_rust.json")),
+    ("lang_shell", include_str!("../assets/code/lang_shell.json")),
+    (
+        "lang_typescript",
+        include_str!("../assets/code/lang_typescript.json"),
+    ),
+    // Keeper's own, written by tools/code-grammars.py.
+    ("_names", include_str!("../assets/code/keeper/_names.json")),
+    (
+        "lang_kotlin",
+        include_str!("../assets/code/keeper/lang_kotlin.json"),
+    ),
+    (
+        "lang_swift",
+        include_str!("../assets/code/keeper/lang_swift.json"),
+    ),
+    (
+        "lang_dart",
+        include_str!("../assets/code/keeper/lang_dart.json"),
+    ),
+    (
+        "lang_ruby",
+        include_str!("../assets/code/keeper/lang_ruby.json"),
+    ),
+    (
+        "lang_elixir",
+        include_str!("../assets/code/keeper/lang_elixir.json"),
+    ),
+    (
+        "lang_lua",
+        include_str!("../assets/code/keeper/lang_lua.json"),
+    ),
+    (
+        "lang_sql",
+        include_str!("../assets/code/keeper/lang_sql.json"),
+    ),
+    (
+        "lang_haskell",
+        include_str!("../assets/code/keeper/lang_haskell.json"),
+    ),
+];
+
+/// Code syntaxes written for Keeper, listed after keybr.com's.
+pub const KEEPER_SYNTAXES_JSON: &str = include_str!("../assets/code/keeper/syntaxes.json");
+
 /// Returns the rules of a code grammar.
 pub fn grammar_json(name: &str) -> Option<&'static str> {
-    match name {
-        "_comments" => Some(include_str!("../assets/code/_comments.json")),
-        "_ident" => Some(include_str!("../assets/code/_ident.json")),
-        "_keywords" => Some(include_str!("../assets/code/_keywords.json")),
-        "_literals" => Some(include_str!("../assets/code/_literals.json")),
-        "lang_cpp" => Some(include_str!("../assets/code/lang_cpp.json")),
-        "lang_csharp" => Some(include_str!("../assets/code/lang_csharp.json")),
-        "lang_go" => Some(include_str!("../assets/code/lang_go.json")),
-        "lang_html_css" => Some(include_str!("../assets/code/lang_html_css.json")),
-        "lang_java" => Some(include_str!("../assets/code/lang_java.json")),
-        "lang_javascript" => Some(include_str!("../assets/code/lang_javascript.json")),
-        "lang_php" => Some(include_str!("../assets/code/lang_php.json")),
-        "lang_python" => Some(include_str!("../assets/code/lang_python.json")),
-        "lang_regex" => Some(include_str!("../assets/code/lang_regex.json")),
-        "lang_rust" => Some(include_str!("../assets/code/lang_rust.json")),
-        "lang_shell" => Some(include_str!("../assets/code/lang_shell.json")),
-        "lang_typescript" => Some(include_str!("../assets/code/lang_typescript.json")),
-        _ => None,
-    }
+    GRAMMARS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, json)| *json)
 }
 
 #[cfg(test)]

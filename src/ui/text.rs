@@ -112,6 +112,12 @@ impl TextView<'_> {
                 } else {
                     s.syntax(ch.cls)
                 };
+                // Without colors the caret is in reverse video whatever its
+                // shape, and an error at the caret adds the error underline.
+                // The line caret is the terminal's own cursor.
+                if s.monochrome() && self.caret != CaretShape::Line {
+                    return base.add_modifier(Modifier::REVERSED | Modifier::BOLD);
+                }
                 match self.caret {
                     CaretShape::Block => {
                         let fg = if s.themed {
@@ -129,9 +135,6 @@ impl TextView<'_> {
                         } else {
                             base.add_modifier(Modifier::REVERSED)
                         }
-                    }
-                    CaretShape::Box if s.monochrome() => {
-                        base.add_modifier(Modifier::REVERSED | Modifier::BOLD)
                     }
                     CaretShape::Box => {
                         let bg = s.color(if s.themed {
@@ -318,7 +321,6 @@ mod tests {
             (ColorMode::Truecolor, true),
             (ColorMode::Ansi256, false),
             (ColorMode::Ansi16, false),
-            (ColorMode::Monochrome, false),
         ] {
             let styles = Styles::new(Theme::get("light"), mode);
             let view = TextView {
@@ -343,14 +345,15 @@ mod tests {
         let mut input = TextInput::new(plain("ab cd"), TextInputSettings::default());
         input.append_char(0.0, u32::from('a'), 0.0);
         let output = input.output();
-        for caret in [CaretShape::Block, CaretShape::Box] {
+        let shapes = [CaretShape::Block, CaretShape::Box, CaretShape::Underline];
+        for (caret, typo) in shapes.into_iter().flat_map(|c| [(c, false), (c, true)]) {
             let view = TextView {
                 chars: &output,
                 styles: &styles,
                 whitespace: WhitespaceStyle::Bullet,
                 caret,
                 rtl: false,
-                typo: false,
+                typo,
             };
             let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
             view.render(buf.area, &mut buf);
@@ -361,10 +364,10 @@ mod tests {
                 );
             }
             assert!(buf[(0, 0)].modifier.contains(Modifier::DIM));
-            assert!(
-                buf[(1, 0)].modifier.contains(Modifier::REVERSED),
-                "{caret:?}"
-            );
+            // The caret is in reverse video, and underlined after a wrong key.
+            let at_caret = buf[(1, 0)].modifier;
+            assert!(at_caret.contains(Modifier::REVERSED), "{caret:?}");
+            assert_eq!(at_caret.contains(Modifier::UNDERLINED), typo, "{caret:?}");
             assert!(!buf[(3, 0)].modifier.contains(Modifier::REVERSED));
         }
     }
