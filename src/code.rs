@@ -401,6 +401,7 @@ mod tests {
     const KEEPER_SYNTAXES: &[(&str, &[&str])] = &[
         ("kotlin", &["fun ", "val ", "?."]),
         ("swift", &["func ", "let ", "guard let"]),
+        ("dart", &["final ", "=> ", "?? "]),
     ];
 
     #[test]

@@ -24,5 +24,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "dart",
+    "name": "Dart",
+    "grammar": [
+      "lang_dart",
+      "_camel",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]

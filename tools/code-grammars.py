@@ -404,6 +404,132 @@ language("swift", "Swift", camel=True, rules={
 
 
 # ---------------------------------------------------------------------------
+# Dart
+
+language("dart", "Dart", camel=True, rules={
+    "start": ref("dt_statement"),
+    "dt_statement": alt(
+        ref("dt_variable"),
+        ref("dt_variable"),
+        flag("defs", ref("dt_function")),
+        flag("defs", ref("dt_class")),
+        ref("dt_if"),
+        ref("dt_for"),
+        ref("dt_call_statement"),
+        ref("dt_return"),
+        flag("comments", ref("dt_comment")),
+    ),
+    "dt_variable": seq(
+        alt(kw("final"), kw("final"), kw("var"), kw("const"), flag("types", ref("dt_type"))),
+        SP, ref("dt_name"), SP, "=", SP, ref("dt_expression"), ";",
+    ),
+    "dt_function": seq(
+        alt(flag("types", ref("dt_type")), "void", seq("Future<", ref("dt_basic_type"), ">")),
+        SP, ref("dt_function_name"), "(", opt(ref("dt_params")), ")",
+        opt(seq(SP, kw("async")), 0.3), SP,
+        alt(
+            seq("=>", SP, ref("dt_expression"), ";"),
+            seq("{", SP, ref("dt_return"), SP, "}"),
+        ),
+    ),
+    "dt_params": alt(
+        seq(ref("dt_param"), opt(seq(",", SP, ref("dt_param")))),
+        seq("{", kw("required"), SP, ref("dt_param"), opt(seq(",", SP, ref("dt_param"))), "}"),
+    ),
+    "dt_param": seq(ref("dt_type"), SP, ref("dt_name")),
+    "dt_class": alt(
+        seq(
+            opt(seq(kw("abstract"), SP), 0.2), kw("class"), SP, ref("dt_type_name"),
+            opt(seq(SP, alt(kw("extends"), kw("implements"), kw("with")), SP, ref("dt_type_name"))),
+            SP, "{", SP, kw("final"), SP, ref("dt_type"), SP, ref("dt_name"), ";", SP, "}",
+        ),
+        seq(
+            kw("enum"), SP, ref("dt_type_name"), SP, "{", SP,
+            alt("idle, loading, done", "small, medium, large", "north, south, east, west"), SP, "}",
+        ),
+        seq(kw("mixin"), SP, ref("dt_type_name"), SP, "{", SP, "}"),
+        seq(kw("extension"), SP, ref("dt_type_name"), "Extension", SP, kw("on"), SP,
+            ref("dt_type"), SP, "{", SP, "}"),
+    ),
+    "dt_if": seq(
+        kw("if"), SP, "(", ref("dt_condition"), ")", SP, "{", SP, ref("dt_call"), ";", SP, "}",
+        opt(seq(SP, kw("else"), SP, "{", SP, ref("dt_call"), ";", SP, "}"), 0.4),
+    ),
+    "dt_for": alt(
+        seq(kw("for"), SP, "(", kw("final"), SP, ref("dt_name"), SP, kw("in"), SP, ref("dt_name"),
+            ")", SP, "{", SP, ref("dt_call"), ";", SP, "}"),
+        flag("numbers", seq(
+            kw("for"), SP, "(", kw("var"), SP, "i", SP, "=", SP, number("0"), ";", SP, "i", SP, "<",
+            SP, ref("dt_name"), ".length;", SP, "i++)", SP, "{", SP, ref("dt_call"), ";", SP, "}",
+        )),
+    ),
+    "dt_call_statement": seq(alt(ref("dt_call"), seq(kw("await"), SP, ref("dt_call")), ref("dt_chain")), ";"),
+    "dt_call": alt(
+        seq(opt(seq(ref("dt_name"), alt(".", "?.")), 0.6), ref("dt_function_name"), "(", opt(ref("dt_args")), ")"),
+        seq("print(", ref("dt_simple"), ")"),
+        seq("setState(()", SP, "=>", SP, ref("dt_name"), SP, "=", SP, ref("dt_simple"), ")"),
+    ),
+    "dt_chain": seq(
+        ref("dt_name"), ".", alt("where", "map", "any", "every"), "((", ref("dt_name"), ")",
+        SP, "=>", SP, ref("dt_lambda_body"), ")",
+        opt(seq(".", alt("toList()", "toSet()", "first", "isEmpty")), 0.6),
+    ),
+    "dt_lambda_body": alt(
+        seq(ref("dt_name"), ".", ref("dt_name")),
+        seq(ref("dt_name"), SP, alt(">", "<", "==", "!="), SP, ref("dt_literal")),
+        seq(ref("dt_name"), SP, alt("*", "+"), SP, ref("dt_int_or_name")),
+    ),
+    "dt_args": seq(ref("dt_arg"), opt(seq(",", SP, ref("dt_arg")))),
+    "dt_arg": alt(ref("dt_simple"), seq(ref("dt_name"), ":", SP, ref("dt_simple"))),
+    "dt_return": seq(kw("return"), SP, ref("dt_expression"), ";"),
+    "dt_condition": alt(
+        seq(ref("dt_name"), SP, alt("==", "!=", ">", "<", ">=", "<="), SP, ref("dt_literal")),
+        seq(ref("dt_name"), ".", alt("isEmpty", "isNotEmpty")),
+        seq(ref("dt_name"), SP, kw("is"), SP, ref("dt_type_name")),
+        seq(ref("dt_name"), SP, "!=", SP, kw("null")),
+    ),
+    "dt_expression": alt(
+        ref("dt_literal"),
+        ref("dt_name"),
+        ref("dt_call"),
+        binary("dt_name", ["+", "-", "*", "/", "~/", "%"], "dt_expression"),
+        seq(ref("dt_name"), SP, "??", SP, ref("dt_literal")),
+        seq("[", ref("dt_literal"), ",", SP, ref("dt_literal"), "]"),
+        seq("{", alt(flag("strings", ref("dt_string")), ref("dt_name")), ":", SP, ref("dt_literal"), "}"),
+        seq(ref("dt_type_name"), "(", opt(ref("dt_args")), ")"),
+        flag("strings", ref("dt_interpolation")),
+    ),
+    "dt_simple": alt(ref("dt_literal"), ref("dt_name")),
+    "dt_literal": alt(
+        flag("numbers", ref("dt_number")),
+        flag("strings", ref("dt_string")),
+        kw("true"), kw("false"), kw("null"),
+    ),
+    "dt_number": number(ref("numeric_literal")),
+    "dt_int_or_name": alt(flag("numbers", number(ref("integer_dec_literal"))), ref("dt_name")),
+    "dt_string": string(alt(
+        seq("'", ref("generic_string_content"), "'"),
+        seq('"', ref("generic_string_content"), '"'),
+    )),
+    "dt_interpolation": string(seq(
+        "'", alt("Hello,", "Total:", "Loaded", "Count:"), SP, "$", ref("dt_name"), "'",
+    )),
+    "dt_type": alt(
+        ref("dt_basic_type"),
+        ref("dt_basic_type"),
+        seq("List<", ref("dt_basic_type"), ">"),
+        seq("Map<String,", SP, ref("dt_basic_type"), ">"),
+        seq(ref("dt_basic_type"), "?"),
+    ),
+    "dt_basic_type": alt("int", "String", "bool", "double", "num", ref("dt_type_name")),
+    "dt_type_name": ref("generic_class_name"),
+    "dt_name": ref("camel_variable_name"),
+    "dt_function_name": ref("camel_function_name"),
+    "dt_comment": comment(alt(seq("// ", ref("comment_text")), seq("/// ", ref("comment_text")))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):
