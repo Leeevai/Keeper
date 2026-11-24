@@ -15,6 +15,8 @@ const BIN: &str = env!("CARGO_BIN_EXE_keeper");
 
 struct Term {
     parser: vt100::Parser,
+    /// Everything the program wrote, escape codes included.
+    raw: Vec<u8>,
     rx: Receiver<Vec<u8>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
@@ -63,6 +65,7 @@ impl Term {
         let nz = |v| NonZeroU16::new(v).unwrap();
         let mut term = Term {
             parser: vt100::Parser::new(nz(rows), nz(cols), 0),
+            raw: Vec::new(),
             rx,
             writer,
             master: pair.master,
@@ -82,7 +85,10 @@ impl Term {
         loop {
             let left = end.saturating_duration_since(Instant::now());
             match self.rx.recv_timeout(left) {
-                Ok(bytes) => self.parser.process(&bytes),
+                Ok(bytes) => {
+                    self.raw.extend_from_slice(&bytes);
+                    self.parser.process(&bytes);
+                }
                 Err(_) => break,
             }
             if Instant::now() >= end {
@@ -98,7 +104,10 @@ impl Term {
         let end = Instant::now() + Duration::from_secs(5);
         while Instant::now() < end {
             match self.rx.recv_timeout(Duration::from_millis(150)) {
-                Ok(bytes) => self.parser.process(&bytes),
+                Ok(bytes) => {
+                    self.raw.extend_from_slice(&bytes);
+                    self.parser.process(&bytes);
+                }
                 Err(_) => break,
             }
         }
@@ -764,6 +773,21 @@ fn uses_the_basic_colors_on_the_linux_console() {
     }
     // The keyboard still shows its key colors.
     assert!(colors.len() >= 3, "{colors:?}");
+    // They are sent as the basic codes (30 to 37, 90 to 97 and their
+    // backgrounds), not as 256-color indexes, which such terminals ignore.
+    let raw = String::from_utf8_lossy(&term.raw);
+    for indexed in ["[38;5;", ";38;5;", "[48;5;", ";48;5;"] {
+        assert!(!raw.contains(indexed), "{indexed} sent");
+    }
+    let basic_codes = raw
+        .split("\x1b[")
+        .filter_map(|code| code.split_once('m').map(|(params, _)| params))
+        .filter(|params| params.bytes().all(|b| b.is_ascii_digit() || b == b';'))
+        .flat_map(|params| params.split(';'))
+        .filter_map(|p| p.parse::<u16>().ok())
+        .filter(|p| matches!(p, 30..=37 | 90..=97 | 40..=47 | 100..=107))
+        .count();
+    assert!(basic_codes > 0, "no basic colors");
     assert!(term.quit());
 }
 

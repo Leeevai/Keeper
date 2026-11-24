@@ -1,6 +1,7 @@
-use std::io::stdout;
+use std::io::{Stdout, stdout};
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -10,10 +11,17 @@ use keeper::app::App;
 use keeper::result::{StreakList, SummaryStats};
 use keeper::settings::{LessonType, Settings};
 use keeper::storage::Storage;
-use keeper::ui::format_duration;
+use keeper::ui::basic_colors::BasicColors;
+use keeper::ui::{ColorDepth, format_duration};
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event};
 use ratatui::crossterm::execute;
+
+/// The terminal, drawn through a writer that sends the 16 basic colors as
+/// basic escape codes while the 16-color mode is on.
+type Screen = Terminal<CrosstermBackend<BasicColors<Stdout>>>;
 
 /// Keeper: a terminal typing tutor ported from keybr.com.
 #[derive(Parser)]
@@ -147,9 +155,13 @@ fn print_stats(storage: &Storage) -> Result<()> {
 
 fn run(storage: Storage) -> Result<()> {
     let mut app = App::new(storage)?;
-    let mut terminal = ratatui::try_init().context("cannot initialize the terminal")?;
+    // Raw mode, the alternate screen and restoring them on a panic.
+    drop(ratatui::try_init().context("cannot initialize the terminal")?);
+    let basic = Arc::new(AtomicBool::new(false));
+    let backend = CrosstermBackend::new(BasicColors::new(stdout(), basic.clone()));
+    let mut terminal = Terminal::new(backend).context("cannot initialize the terminal")?;
     let _ = execute!(stdout(), EnableBracketedPaste);
-    let result = event_loop(&mut terminal, &mut app);
+    let result = event_loop(&mut terminal, &mut app, &basic);
     let _ = execute!(
         stdout(),
         DisableBracketedPaste,
@@ -159,7 +171,7 @@ fn run(storage: Storage) -> Result<()> {
     result
 }
 
-fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
+fn event_loop(terminal: &mut Screen, app: &mut App, basic: &AtomicBool) -> Result<()> {
     // Key presses are timestamped as soon as they arrive, on their own
     // thread, so that drawing never delays the measured typing speed.
     let (tx, rx) = mpsc::channel::<(Event, Instant)>();
@@ -175,6 +187,7 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<
     loop {
         if dirty {
             let now = Instant::now();
+            basic.store(app.styles.depth == ColorDepth::Ansi16, Ordering::Relaxed);
             terminal.draw(|frame| app.render(frame, now))?;
             dirty = false;
         }
