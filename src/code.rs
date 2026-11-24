@@ -369,4 +369,31 @@ mod tests {
         }
         assert_eq!(Syntax::get("nope").id, "html");
     }
+
+    fn references(p: &Prod, out: &mut Vec<String>) {
+        match p {
+            Prod::Ref { r#ref } => out.push(r#ref.clone()),
+            Prod::Cond { cond, .. } => references(cond, out),
+            Prod::Span { span, .. } => references(span, out),
+            Prod::Opt { opt, .. } => references(opt, out),
+            Prod::Seq { seq: items } | Prod::Alt { alt: items } => {
+                items.iter().for_each(|c| references(c, out))
+            }
+            Prod::Lit(_) => {}
+        }
+    }
+
+    #[test]
+    fn every_rule_reference_resolves() {
+        for syntax in Syntax::all() {
+            assert!(syntax.rule(&syntax.start).is_some(), "{}", syntax.id);
+            let mut refs = Vec::new();
+            for rules in &syntax.grammar {
+                rules.values().for_each(|p| references(p, &mut refs));
+            }
+            for name in refs {
+                assert!(syntax.rule(&name).is_some(), "{}: {name}", syntax.id);
+            }
+        }
+    }
 }
