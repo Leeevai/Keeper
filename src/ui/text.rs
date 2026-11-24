@@ -7,7 +7,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use unicode_width::UnicodeWidthChar;
 
-use super::Styles;
+use super::{ColorDepth, Styles};
 use crate::settings::{CaretShape, WhitespaceStyle};
 use crate::textinput::{Attr, Char};
 use crate::unicode::SPACE;
@@ -112,7 +112,6 @@ impl TextView<'_> {
                 } else {
                     s.syntax(ch.cls)
                 };
-                let accent = s.color(s.palette.accent);
                 match self.caret {
                     CaretShape::Block => {
                         let fg = if s.themed {
@@ -143,9 +142,18 @@ impl TextView<'_> {
                         base.bg(bg).add_modifier(Modifier::BOLD)
                     }
                     CaretShape::Line => base.add_modifier(Modifier::BOLD),
-                    CaretShape::Underline => base
-                        .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
-                        .underline_color(accent),
+                    CaretShape::Underline => {
+                        let style = base.add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
+                        // An underline color is escape code 58, which terminals
+                        // without it read as other codes: a stray background,
+                        // or blinking with 256 colors. Terminals with 24-bit
+                        // color understand it.
+                        if s.depth == ColorDepth::Truecolor {
+                            style.underline_color(s.color(s.palette.accent))
+                        } else {
+                            style
+                        }
+                    }
                 }
             }
         }
@@ -299,6 +307,33 @@ mod tests {
             let row: String = (0..5).map(|x| buf[(x, 0)].symbol().to_string()).collect();
             assert_eq!(row, "ab·cd");
             assert_eq!(buf[(0, 0)].fg, styles.hit.fg.unwrap());
+        }
+    }
+
+    #[test]
+    fn colors_the_underline_caret_only_with_24_bit_color() {
+        let input = TextInput::new(plain("ab"), TextInputSettings::default());
+        let output = input.output();
+        for (mode, colored) in [
+            (ColorMode::Truecolor, true),
+            (ColorMode::Ansi256, false),
+            (ColorMode::Ansi16, false),
+            (ColorMode::Monochrome, false),
+        ] {
+            let styles = Styles::new(Theme::get("light"), mode);
+            let view = TextView {
+                chars: &output,
+                styles: &styles,
+                whitespace: WhitespaceStyle::Bullet,
+                caret: CaretShape::Underline,
+                rtl: false,
+                typo: false,
+            };
+            let mut buf = Buffer::empty(Rect::new(0, 0, 4, 1));
+            view.render(buf.area, &mut buf);
+            let cell = &buf[(0, 0)];
+            assert!(cell.modifier.contains(Modifier::UNDERLINED), "{mode:?}");
+            assert_eq!(cell.underline_color != Color::Reset, colored, "{mode:?}");
         }
     }
 
