@@ -71,9 +71,9 @@ impl Storage {
     pub fn load_settings(&self) -> Settings {
         let path = self.settings_path();
         match fs::read_to_string(&path) {
-            Ok(text) => match serde_json::from_str::<Settings>(&text) {
-                Ok(settings) => settings.normalize(),
-                Err(_) => {
+            Ok(text) => match Settings::from_json(&text) {
+                Some(settings) => settings.normalize(),
+                None => {
                     let _ = fs::rename(&path, path.with_extension("json.bad"));
                     Settings::default()
                 }
@@ -248,6 +248,11 @@ mod tests {
         };
         storage.save_settings(&settings).unwrap();
         assert_eq!(storage.load_settings(), settings);
+        // A value of a later version keeps the other settings, and the file.
+        let later = r#"{"lesson.targetSpeed": 300, "lesson.type": "someday"}"#;
+        fs::write(storage.settings_path(), later).unwrap();
+        assert_eq!(storage.load_settings().target_speed, 300);
+        assert!(!dir.path().join("settings.json.bad").exists());
         fs::write(storage.settings_path(), "{nope").unwrap();
         assert_eq!(storage.load_settings(), Settings::default());
         assert!(dir.path().join("settings.json.bad").exists());

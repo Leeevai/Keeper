@@ -582,6 +582,29 @@ pub struct KeyboardOptions {
 }
 
 impl Settings {
+    /// Reads settings saved by any version of Keeper or by keybr.com. A
+    /// value this version does not know, such as a lesson type added in a
+    /// later version, falls back to its default on its own, instead of
+    /// taking every other setting with it. Returns `None` for text that is
+    /// not a JSON object.
+    pub fn from_json(text: &str) -> Option<Settings> {
+        let value: serde_json::Value = serde_json::from_str(text).ok()?;
+        let object = value.as_object()?.clone();
+        if let Ok(settings) = serde_json::from_value(value) {
+            return Some(settings);
+        }
+        // Keep each value that reads on its own; missing ones are defaults.
+        let mut kept = serde_json::Map::new();
+        for (key, value) in object {
+            let mut candidate = kept.clone();
+            candidate.insert(key, value);
+            if serde_json::from_value::<Settings>(candidate.clone().into()).is_ok() {
+                kept = candidate;
+            }
+        }
+        serde_json::from_value(kept.into()).ok()
+    }
+
     /// Clamps numbers into their ranges and replaces unknown ids.
     pub fn normalize(mut self) -> Self {
         let clamp01 = |v: f64| {
@@ -625,9 +648,6 @@ impl Settings {
         }
         if Layout::find(&self.system_layout).is_none() {
             self.system_layout = d_layout();
-        }
-        if crate::theme::Theme::find(&self.theme).is_none() {
-            self.theme = d_theme();
         }
         self.code_flags
             .retain(|f| crate::code::FLAGS.contains(&f.as_str()));
@@ -773,7 +793,26 @@ mod tests {
         assert_eq!(s.repeat_words, 1);
         assert_eq!(s.layout, "en-us");
         assert_eq!(s.book, "en-alice-wonderland");
-        assert_eq!(s.theme, "system");
+        // A theme of another version is kept, so that saving another
+        // setting does not lose it, and shows as the system theme.
+        assert_eq!(s.theme, "nope");
+        assert_eq!(crate::theme::Theme::get(&s.theme).id, "system");
+    }
+
+    #[test]
+    fn values_of_other_versions_keep_the_other_settings() {
+        let s = Settings::from_json(
+            r#"{"lesson.targetSpeed": 300, "lesson.type": "someday", "ui.colorMode": "12bit",
+                "ui.theme": "future", "keyboard.layout": "en-dvorak", "x": 1}"#,
+        )
+        .unwrap();
+        assert_eq!(s.target_speed, 300);
+        assert_eq!(s.layout, "en-dvorak");
+        assert_eq!(s.theme, "future");
+        assert_eq!(s.lesson_type, LessonType::default());
+        assert_eq!(s.color_mode, ColorMode::default());
+        assert_eq!(Settings::from_json("{nope"), None);
+        assert_eq!(Settings::from_json("[1, 2]"), None);
     }
 
     #[test]
