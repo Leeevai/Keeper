@@ -249,6 +249,161 @@ language("kotlin", "Kotlin", camel=True, rules={
 
 
 # ---------------------------------------------------------------------------
+# Swift
+
+language("swift", "Swift", camel=True, rules={
+    "start": ref("sw_statement"),
+    "sw_statement": alt(
+        ref("sw_binding"),
+        ref("sw_binding"),
+        flag("defs", ref("sw_function")),
+        flag("defs", ref("sw_type_declaration")),
+        ref("sw_if"),
+        ref("sw_guard"),
+        ref("sw_for"),
+        ref("sw_switch"),
+        ref("sw_call"),
+        ref("sw_return"),
+        flag("comments", ref("sw_comment")),
+    ),
+    "sw_binding": seq(
+        alt(kw("let"), kw("let"), kw("var")), SP, ref("sw_name"),
+        flag("types", seq(":", SP, ref("sw_type"))), SP, "=", SP, ref("sw_expression"),
+    ),
+    "sw_function": seq(
+        opt(seq(alt(kw("private"), kw("public"), kw("static"), kw("override"), kw("mutating")), SP), 0.3),
+        kw("func"), SP, ref("sw_function_name"), "(", opt(ref("sw_params")), ")",
+        opt(seq(SP, alt(kw("async"), kw("throws"), seq(kw("async"), SP, kw("throws")))), 0.3),
+        opt(seq(SP, "->", SP, ref("sw_type")), 0.7),
+        SP, "{", SP, ref("sw_return"), SP, "}",
+    ),
+    "sw_params": seq(ref("sw_param"), opt(seq(",", SP, ref("sw_param")))),
+    "sw_param": seq(
+        opt(seq(alt("_", "with", "for", "at", "from"), SP), 0.4),
+        ref("sw_name"), ":", SP, ref("sw_type"),
+        opt(seq(SP, "=", SP, ref("sw_literal")), 0.2),
+    ),
+    "sw_type_declaration": alt(
+        seq(
+            kw("struct"), SP, ref("sw_type_name"),
+            opt(seq(":", SP, alt("Codable", "Equatable", "Hashable", "Identifiable", "View"))),
+            SP, "{", SP, ref("sw_member"), opt(seq(SP, ref("sw_member"))), SP, "}",
+        ),
+        seq(
+            opt(seq(kw("final"), SP), 0.3), kw("class"), SP, ref("sw_type_name"),
+            opt(seq(":", SP, ref("sw_type_name"))), SP, "{", SP, ref("sw_member"), SP, "}",
+        ),
+        seq(
+            kw("enum"), SP, ref("sw_type_name"), SP, "{", SP, kw("case"), SP,
+            alt("idle, loading, loaded, failed", "north, south, east, west", "small, medium, large"),
+            SP, "}",
+        ),
+        seq(kw("protocol"), SP, ref("sw_type_name"), SP, "{", SP, kw("func"), SP,
+            ref("sw_function_name"), "()", SP, "}"),
+        seq(kw("extension"), SP, ref("sw_type_name"), ":", SP,
+            alt("Equatable", "CustomStringConvertible", "Sendable"), SP, "{", SP, "}"),
+    ),
+    "sw_member": seq(alt(kw("let"), kw("var")), SP, ref("sw_name"), ":", SP, ref("sw_type")),
+    "sw_if": seq(
+        kw("if"), SP,
+        alt(
+            ref("sw_condition"),
+            seq(kw("let"), SP, ref("sw_name"), SP, "=", SP, ref("sw_optional")),
+            seq(kw("let"), SP, ref("sw_name")),
+        ),
+        SP, "{", SP, ref("sw_call"), SP, "}",
+        opt(seq(SP, kw("else"), SP, "{", SP, ref("sw_call"), SP, "}"), 0.4),
+    ),
+    "sw_guard": seq(
+        kw("guard"), SP, kw("let"), SP, ref("sw_name"), SP, "=", SP, ref("sw_optional"), SP,
+        kw("else"), SP, "{", SP, kw("return"), opt(seq(SP, kw("nil")), 0.3), SP, "}",
+    ),
+    "sw_optional": alt(
+        seq(ref("sw_name"), "?.", ref("sw_name")),
+        seq(ref("sw_name"), ".first"),
+        seq(ref("sw_name"), ".last"),
+        seq(ref("sw_name"), "[", ref("sw_name"), "]"),
+        seq(ref("sw_type_name"), "(", ref("sw_name"), ")"),
+    ),
+    "sw_for": seq(
+        kw("for"), SP, ref("sw_name"), SP, kw("in"), SP,
+        alt(
+            ref("sw_name"),
+            flag("numbers", seq(ref("sw_int"), "..<", ref("sw_int"))),
+            flag("numbers", seq(ref("sw_int"), "..<", ref("sw_name"), ".count")),
+            seq(ref("sw_name"), ".indices"),
+        ),
+        opt(seq(SP, kw("where"), SP, ref("sw_condition")), 0.25),
+        SP, "{", SP, ref("sw_call"), SP, "}",
+    ),
+    "sw_switch": seq(
+        kw("switch"), SP, ref("sw_name"), SP, "{", SP, kw("case"), SP, ".",
+        alt("idle", "loading", "success", "failure", "none"), ":", SP, ref("sw_call"), SP,
+        kw("default"), ":", SP, kw("break"), SP, "}",
+    ),
+    "sw_call": alt(
+        seq(opt(seq(ref("sw_name"), alt(".", "?.")), 0.5), ref("sw_function_name"), "(", opt(ref("sw_args")), ")"),
+        seq(alt(kw("try"), kw("await"), seq(kw("try"), SP, kw("await"))), SP, ref("sw_function_name"), "()"),
+        seq("print(", ref("sw_simple"), ")"),
+        seq(
+            ref("sw_name"), ".", alt("map", "filter", "forEach", "sorted", "compactMap", "contains"),
+            SP, "{", SP, ref("sw_closure"), SP, "}",
+        ),
+    ),
+    "sw_args": seq(ref("sw_arg"), opt(seq(",", SP, ref("sw_arg")))),
+    "sw_arg": seq(opt(seq(ref("sw_name"), ":", SP), 0.5), ref("sw_simple")),
+    "sw_closure": alt(
+        seq("$0", SP, alt("*", "+", "-"), SP, ref("sw_int_or_name")),
+        seq("$0", ".", ref("sw_name")),
+        seq("$0", SP, alt(">", "<", "==", "!="), SP, ref("sw_literal")),
+        seq(ref("sw_name"), SP, kw("in"), SP, ref("sw_name"), ".", ref("sw_name")),
+    ),
+    "sw_return": seq(kw("return"), SP, ref("sw_expression")),
+    "sw_condition": alt(
+        seq(ref("sw_name"), SP, alt("==", "!=", ">", "<", ">=", "<="), SP, ref("sw_literal")),
+        seq(ref("sw_name"), ".isEmpty"),
+        seq("!", ref("sw_name"), ".isEmpty"),
+        seq(ref("sw_name"), SP, "!=", SP, kw("nil")),
+    ),
+    "sw_expression": alt(
+        ref("sw_literal"),
+        ref("sw_name"),
+        ref("sw_call"),
+        binary("sw_name", ["+", "-", "*", "/", "%"], "sw_expression"),
+        seq(ref("sw_name"), SP, "??", SP, ref("sw_literal")),
+        seq("[", ref("sw_literal"), ",", SP, ref("sw_literal"), "]"),
+        seq(ref("sw_type_name"), "(", opt(ref("sw_args")), ")"),
+        flag("strings", ref("sw_interpolation")),
+    ),
+    "sw_simple": alt(ref("sw_literal"), ref("sw_name")),
+    "sw_literal": alt(
+        flag("numbers", ref("sw_number")),
+        flag("strings", ref("sw_string")),
+        kw("true"), kw("false"), kw("nil"),
+    ),
+    "sw_number": number(ref("numeric_literal")),
+    "sw_int": number(ref("integer_dec_literal")),
+    "sw_int_or_name": alt(flag("numbers", ref("sw_int")), ref("sw_name")),
+    "sw_string": string(seq('"', ref("generic_string_content"), '"')),
+    "sw_interpolation": string(seq(
+        '"', alt("Hello,", "Total:", "Loaded", "Count:"), SP, "\\(", ref("sw_name"), ")", '"',
+    )),
+    "sw_type": alt(
+        ref("sw_basic_type"),
+        ref("sw_basic_type"),
+        seq("[", ref("sw_basic_type"), "]"),
+        seq("[String:", SP, ref("sw_basic_type"), "]"),
+        seq(ref("sw_basic_type"), "?"),
+    ),
+    "sw_basic_type": alt("Int", "String", "Bool", "Double", ref("sw_type_name")),
+    "sw_type_name": ref("generic_class_name"),
+    "sw_name": ref("camel_variable_name"),
+    "sw_function_name": ref("camel_function_name"),
+    "sw_comment": comment(seq("// ", ref("comment_text"))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):

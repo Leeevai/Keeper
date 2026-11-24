@@ -398,7 +398,10 @@ mod tests {
     }
 
     /// Keeper's own grammars, and text that only that language has.
-    const KEEPER_SYNTAXES: &[(&str, &[&str])] = &[("kotlin", &["fun ", "val ", "?."])];
+    const KEEPER_SYNTAXES: &[(&str, &[&str])] = &[
+        ("kotlin", &["fun ", "val ", "?."]),
+        ("swift", &["func ", "let ", "guard let"]),
+    ];
 
     #[test]
     fn keeper_syntaxes_look_like_their_language() {

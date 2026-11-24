@@ -11,5 +11,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "swift",
+    "name": "Swift",
+    "grammar": [
+      "lang_swift",
+      "_camel",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]
