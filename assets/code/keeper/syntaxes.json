@@ -4,7 +4,7 @@
     "name": "Kotlin",
     "grammar": [
       "lang_kotlin",
-      "_camel",
+      "_names",
       "_keywords",
       "_ident",
       "_literals",
@@ -17,7 +17,7 @@
     "name": "Swift",
     "grammar": [
       "lang_swift",
-      "_camel",
+      "_names",
       "_keywords",
       "_ident",
       "_literals",
@@ -30,7 +30,7 @@
     "name": "Dart",
     "grammar": [
       "lang_dart",
-      "_camel",
+      "_names",
       "_keywords",
       "_ident",
       "_literals",

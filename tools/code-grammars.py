@@ -2,9 +2,9 @@
 """Writes the code grammars that Keeper adds to keybr.com's.
 
 The output goes to assets/code/keeper, which the keybr.com extraction tool
-leaves alone: one lang_<id>.json of rules per language, _camel.json with
-camelCase names for the languages that use them, and syntaxes.json, the
-list that Keeper loads after keybr's.
+leaves alone: one lang_<id>.json of rules per language, _names.json with
+names shared by these languages, and syntaxes.json, the list that Keeper
+loads after keybr's.
 
 Rules use keybr's grammar format. A string is literal text, and these
 combine them:
@@ -78,8 +78,10 @@ def binary(operand, operators, rest):
     return seq(ref(operand), SP, alt(*operators), SP, ref(rest))
 
 
-# camelCase names, for the languages that use them.
-CAMEL = {
+# Names shared by Keeper's languages. keybr's generic_function_name has a
+# space after get and set ("get file_size"), so snake_case languages use
+# snake_function_name instead.
+NAMES = {
     "camel_variable_name": alt(
         "count", "index", "value", "result", "items", "user", "users", "config",
         "buffer", "total", "name", "data", "key", "size", "width", "height",
@@ -100,24 +102,35 @@ CAMEL = {
             "Response", "Result", "Index", "Cache", "Session", "Token", "Layout",
         ),
     ),
+    "snake_function_name": seq(
+        alt(
+            "get", "set", "load", "save", "update", "build", "parse", "find", "create",
+            "remove", "handle", "fetch", "render", "validate", "format", "reset", "process",
+            "send", "read", "write",
+        ),
+        opt(seq("_", alt(
+            "user", "data", "config", "item", "items", "value", "name", "request",
+            "response", "result", "cache", "session", "token", "file", "line",
+        )), 0.7),
+    ),
 }
 
 LANGUAGES = []
 
 
-def language(id, name, rules, camel=False):
+def language(id, name, rules):
     """Registers a grammar; its `start` rule makes one statement."""
     for rule, body in rules.items():
         # An alternative that refers to this rule would still be picked
         # with the flag off, and print nothing: flag where it is used.
         assert "flag" not in body, f"{id}: move the flag of {rule} to where it is used"
-    LANGUAGES.append((id, name, rules, camel))
+    LANGUAGES.append((id, name, rules))
 
 
 # ---------------------------------------------------------------------------
 # Kotlin
 
-language("kotlin", "Kotlin", camel=True, rules={
+language("kotlin", "Kotlin", rules={
     "start": ref("kt_statement"),
     "kt_statement": alt(
         ref("kt_property"),
@@ -251,7 +264,7 @@ language("kotlin", "Kotlin", camel=True, rules={
 # ---------------------------------------------------------------------------
 # Swift
 
-language("swift", "Swift", camel=True, rules={
+language("swift", "Swift", rules={
     "start": ref("sw_statement"),
     "sw_statement": alt(
         ref("sw_binding"),
@@ -406,7 +419,7 @@ language("swift", "Swift", camel=True, rules={
 # ---------------------------------------------------------------------------
 # Dart
 
-language("dart", "Dart", camel=True, rules={
+language("dart", "Dart", rules={
     "start": ref("dt_statement"),
     "dt_statement": alt(
         ref("dt_variable"),
@@ -539,11 +552,11 @@ def write(name, rules):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    write("_camel", CAMEL)
+    write("_names", NAMES)
     syntaxes = []
-    for id, name, rules, camel in LANGUAGES:
+    for id, name, rules in LANGUAGES:
         write(f"lang_{id}", rules)
-        grammar = [f"lang_{id}"] + (["_camel"] if camel else []) + SHARED
+        grammar = [f"lang_{id}", "_names"] + SHARED
         syntaxes.append({"id": id, "name": name, "grammar": grammar, "start": "start"})
     text = json.dumps(syntaxes, indent=2, ensure_ascii=False)
     (OUT / "syntaxes.json").write_text(text + "\n", encoding="utf-8")

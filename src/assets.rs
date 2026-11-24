@@ -106,7 +106,7 @@ pub const GRAMMARS: &[(&str, &str)] = &[
         include_str!("../assets/code/lang_typescript.json"),
     ),
     // Keeper's own, written by tools/code-grammars.py.
-    ("_camel", include_str!("../assets/code/keeper/_camel.json")),
+    ("_names", include_str!("../assets/code/keeper/_names.json")),
     (
         "lang_kotlin",
         include_str!("../assets/code/keeper/lang_kotlin.json"),
