@@ -910,6 +910,122 @@ language("lua", "Lua", rules={
 
 
 # ---------------------------------------------------------------------------
+# SQL
+
+language("sql", "SQL", rules={
+    "start": ref("sql_statement"),
+    "sql_statement": alt(
+        ref("sql_select"),
+        ref("sql_select"),
+        ref("sql_select"),
+        ref("sql_insert"),
+        ref("sql_update"),
+        ref("sql_delete"),
+        flag("defs", ref("sql_schema")),
+        flag("comments", ref("sql_comment")),
+    ),
+    "sql_select": seq(
+        kw("SELECT"), SP, opt(seq(kw("DISTINCT"), SP), 0.15), ref("sql_columns"), SP,
+        kw("FROM"), SP, ref("sql_table"),
+        opt(seq(SP, ref("sql_join")), 0.35),
+        opt(seq(SP, kw("WHERE"), SP, ref("sql_condition")), 0.7),
+        opt(seq(SP, kw("GROUP"), SP, kw("BY"), SP, ref("sql_column")), 0.25),
+        opt(seq(SP, kw("ORDER"), SP, kw("BY"), SP, ref("sql_column"), opt(seq(SP, alt(kw("ASC"), kw("DESC")))))),
+        opt(flag("numbers", seq(SP, kw("LIMIT"), SP, ref("sql_int"))), 0.3),
+        ";",
+    ),
+    "sql_columns": alt(
+        "*",
+        seq(
+            ref("sql_column_expression"), opt(seq(",", SP, ref("sql_column_expression"))),
+            opt(seq(",", SP, ref("sql_column_expression")), 0.3),
+        ),
+    ),
+    "sql_column_expression": alt(
+        ref("sql_column"),
+        ref("sql_column"),
+        seq(
+            alt(kw("COUNT"), kw("SUM"), kw("AVG"), kw("MAX"), kw("MIN")), "(", alt("*", ref("sql_column")), ")",
+            opt(seq(SP, kw("AS"), SP, alt("total", "count", "average", "latest", "n")), 0.6),
+        ),
+        seq(kw("COALESCE"), "(", ref("sql_column"), ",", SP, ref("sql_value"), ")"),
+    ),
+    "sql_join": seq(
+        opt(seq(alt(kw("LEFT"), kw("INNER")), SP), 0.6), kw("JOIN"), SP, ref("sql_table"), SP, kw("ON"), SP,
+        ref("sql_table"), ".id", SP, "=", SP, ref("sql_table"), ".", ref("sql_foreign_key"),
+    ),
+    "sql_foreign_key": alt("user_id", "order_id", "product_id", "account_id", "team_id"),
+    "sql_condition": alt(
+        ref("sql_comparison"),
+        ref("sql_comparison"),
+        seq(ref("sql_column"), SP, kw("IS"), SP, opt(seq(kw("NOT"), SP)), kw("NULL")),
+        seq(ref("sql_column"), SP, kw("IN"), SP, "(", ref("sql_value"), ",", SP, ref("sql_value"), ")"),
+        seq(ref("sql_column"), SP, kw("BETWEEN"), SP, ref("sql_value"), SP, kw("AND"), SP, ref("sql_value")),
+        seq(ref("sql_comparison"), SP, alt(kw("AND"), kw("OR")), SP, ref("sql_comparison")),
+        flag("strings", seq(ref("sql_column"), SP, kw("LIKE"), SP, ref("sql_string"))),
+    ),
+    "sql_comparison": seq(ref("sql_column"), SP, alt("=", "<>", ">", "<", ">=", "<="), SP, ref("sql_value")),
+    "sql_value": alt(
+        flag("numbers", ref("sql_number")),
+        flag("numbers", ref("sql_number")),
+        flag("strings", ref("sql_string")),
+        flag("strings", ref("sql_string")),
+        "?",
+        seq(":", ref("sql_column")),
+        kw("NULL"), kw("TRUE"), kw("FALSE"),
+    ),
+    "sql_insert": seq(
+        kw("INSERT"), SP, kw("INTO"), SP, ref("sql_table"), SP, "(", ref("sql_column"), ",", SP,
+        ref("sql_column"), ")", SP, kw("VALUES"), SP, "(", ref("sql_value"), ",", SP, ref("sql_value"), ")", ";",
+    ),
+    "sql_update": seq(
+        kw("UPDATE"), SP, ref("sql_table"), SP, kw("SET"), SP, ref("sql_column"), SP, "=", SP, ref("sql_value"),
+        opt(seq(",", SP, ref("sql_column"), SP, "=", SP, ref("sql_value")), 0.3),
+        SP, kw("WHERE"), SP, ref("sql_condition"), ";",
+    ),
+    "sql_delete": seq(kw("DELETE"), SP, kw("FROM"), SP, ref("sql_table"), SP, kw("WHERE"), SP, ref("sql_condition"), ";"),
+    "sql_schema": alt(
+        seq(
+            kw("CREATE"), SP, kw("TABLE"), SP, opt(seq(kw("IF"), SP, kw("NOT"), SP, kw("EXISTS"), SP), 0.3),
+            ref("sql_table"), SP, "(", "id", SP, kw("INTEGER"), SP, kw("PRIMARY"), SP, kw("KEY"), ",", SP,
+            ref("sql_column_definition"), opt(seq(",", SP, ref("sql_column_definition"))), ")", ";",
+        ),
+        seq(
+            kw("CREATE"), SP, opt(seq(kw("UNIQUE"), SP), 0.3), kw("INDEX"), SP, "idx_", ref("sql_table"), "_",
+            ref("sql_column"), SP, kw("ON"), SP, ref("sql_table"), SP, "(", ref("sql_column"), ")", ";",
+        ),
+        seq(kw("ALTER"), SP, kw("TABLE"), SP, ref("sql_table"), SP, kw("ADD"), SP, kw("COLUMN"), SP,
+            ref("sql_column_definition"), ";"),
+        seq(kw("DROP"), SP, kw("TABLE"), SP, kw("IF"), SP, kw("EXISTS"), SP, ref("sql_table"), ";"),
+    ),
+    "sql_column_definition": seq(
+        ref("sql_column"), SP, ref("sql_type"),
+        opt(seq(SP, kw("NOT"), SP, kw("NULL")), 0.4),
+        opt(seq(SP, kw("DEFAULT"), SP, ref("sql_value")), 0.2),
+    ),
+    "sql_type": alt(
+        kw("TEXT"), kw("INTEGER"), kw("BOOLEAN"), kw("TIMESTAMP"), kw("DATE"),
+        flag("numbers", seq(kw("VARCHAR"), "(", number("255"), ")")),
+        flag("numbers", seq(kw("DECIMAL"), "(", number("10"), ",", SP, number("2"), ")")),
+    ),
+    "sql_table": alt(
+        "users", "orders", "products", "accounts", "sessions", "payments", "teams", "events",
+        "comments", "invoices",
+    ),
+    "sql_column": alt(
+        "id", "name", "email", "status", "created_at", "updated_at", "user_id", "total", "price",
+        "quantity", "title", "is_active", "amount", "country",
+    ),
+    "sql_number": number(alt(ref("integer_dec_literal"), ref("integer_dec_literal"), ref("float_dec_literal"))),
+    "sql_int": number(ref("integer_dec_literal")),
+    "sql_string": string(seq(
+        "'", alt("active", "pending", "admin", "%@example.com", "2024-01-01", "US", "paid", "draft"), "'",
+    )),
+    "sql_comment": comment(seq("-- ", ref("comment_text"))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):

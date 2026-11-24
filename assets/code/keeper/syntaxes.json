@@ -76,5 +76,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "sql",
+    "name": "SQL",
+    "grammar": [
+      "lang_sql",
+      "_names",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]

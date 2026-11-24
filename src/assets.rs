@@ -131,6 +131,10 @@ pub const GRAMMARS: &[(&str, &str)] = &[
         "lang_lua",
         include_str!("../assets/code/keeper/lang_lua.json"),
     ),
+    (
+        "lang_sql",
+        include_str!("../assets/code/keeper/lang_sql.json"),
+    ),
 ];
 
 /// Code syntaxes written for Keeper, listed after keybr.com's.
