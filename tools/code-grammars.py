@@ -543,6 +543,131 @@ language("dart", "Dart", rules={
 
 
 # ---------------------------------------------------------------------------
+# Ruby
+
+language("ruby", "Ruby", rules={
+    "start": ref("rb_statement"),
+    "rb_statement": alt(
+        ref("rb_assign"),
+        ref("rb_assign"),
+        flag("defs", ref("rb_def")),
+        flag("defs", ref("rb_class")),
+        ref("rb_call"),
+        ref("rb_block"),
+        ref("rb_if"),
+        ref("rb_modifier"),
+        ref("rb_attr"),
+        flag("strings", ref("rb_require")),
+        flag("comments", ref("rb_comment")),
+    ),
+    "rb_assign": alt(
+        seq(alt(ref("rb_name"), seq("@", ref("rb_name"))), SP, alt("=", "=", "||=", "+="), SP, ref("rb_expression")),
+        seq(ref("rb_constant"), SP, "=", SP, ref("rb_expression")),
+    ),
+    "rb_constant": alt("MAX_SIZE", "DEFAULT_TIMEOUT", "VERSION", "LIMIT", "API_URL", "RETRIES"),
+    "rb_def": alt(
+        seq(
+            kw("def"), SP, opt(seq(kw("self"), "."), 0.2), ref("rb_method_name"),
+            "(", ref("rb_params"), ")", SP, ref("rb_body"), SP, kw("end"),
+        ),
+        seq(kw("def"), SP, ref("rb_method_name"), SP, "=", SP, ref("rb_expression")),
+    ),
+    "rb_method_name": alt(
+        ref("snake_function_name"),
+        ref("snake_function_name"),
+        seq(ref("snake_function_name"), "?"),
+        seq(ref("snake_function_name"), "!"),
+        "to_s", "initialize", "each", "call",
+    ),
+    "rb_params": seq(
+        ref("rb_name"), opt(seq(",", SP, ref("rb_name"))),
+        opt(seq(",", SP, ref("rb_name"), ":", SP, ref("rb_literal")), 0.3),
+    ),
+    "rb_body": alt(
+        ref("rb_expression"),
+        ref("rb_call"),
+        seq(ref("rb_name"), ".", ref("rb_method_name")),
+    ),
+    "rb_class": alt(
+        seq(kw("class"), SP, ref("rb_class_name"), opt(seq(SP, "<", SP, ref("rb_class_name"))),
+            SP, ref("rb_attr"), SP, kw("end")),
+        seq(kw("module"), SP, ref("rb_class_name"), SP, kw("end")),
+        seq(kw("class"), SP, ref("rb_class_name"), "Error", SP, "<", SP, "StandardError;", SP, kw("end")),
+        seq(kw("include"), SP, alt("Comparable", "Enumerable")),
+    ),
+    "rb_attr": seq(
+        alt(kw("attr_reader"), kw("attr_accessor"), kw("attr_writer")), SP,
+        ref("rb_symbol"), opt(seq(",", SP, ref("rb_symbol"))),
+    ),
+    "rb_require": seq(
+        alt(kw("require"), kw("require_relative")), SP,
+        string(seq('"', alt("json", "set", "time", "net/http", "yaml", "logger", "./config"), '"')),
+    ),
+    "rb_call": alt(
+        seq(alt("puts", "p", kw("raise"), "logger.info"), SP, ref("rb_expression")),
+        seq(ref("rb_name"), ".", ref("rb_method_name"), opt(seq("(", ref("rb_args"), ")"))),
+        seq(ref("rb_class_name"), ".", alt("new", "find", "create", "call"), "(", opt(ref("rb_args")), ")"),
+    ),
+    "rb_args": seq(ref("rb_arg"), opt(seq(",", SP, ref("rb_arg")))),
+    "rb_arg": alt(ref("rb_name"), ref("rb_literal"), seq(ref("rb_name"), ":", SP, ref("rb_literal"))),
+    "rb_block": alt(
+        seq(
+            ref("rb_name"), ".", alt("each", "map", "select", "reject", "each_with_index", "group_by"),
+            SP, kw("do"), SP, "|", ref("rb_name"), "|", SP, ref("rb_call"), SP, kw("end"),
+        ),
+        seq(
+            ref("rb_name"), ".", alt("map", "select", "sum", "sort_by", "find", "count"),
+            SP, "{", SP, "|", ref("rb_name"), "|", SP, ref("rb_name"), ".", ref("rb_method_name"), SP, "}",
+        ),
+        seq(ref("rb_name"), ".", alt("map", "select", "each", "sum"), "(&", ref("rb_symbol"), ")"),
+        flag("numbers", seq(ref("rb_int"), ".times", SP, "{", SP, "|i|", SP, ref("rb_call"), SP, "}")),
+    ),
+    "rb_if": seq(
+        alt(kw("if"), kw("unless")), SP, ref("rb_condition"), SP, kw("then"), SP, ref("rb_call"),
+        opt(seq(SP, kw("else"), SP, ref("rb_call")), 0.4), SP, kw("end"),
+    ),
+    "rb_modifier": seq(
+        alt(ref("rb_call"), seq(kw("return"), SP, ref("rb_expression")), kw("next"), kw("break")),
+        SP, alt(kw("if"), kw("unless")), SP, ref("rb_condition"),
+    ),
+    "rb_condition": alt(
+        seq(ref("rb_name"), SP, alt("==", "!=", ">", "<", ">=", "<="), SP, ref("rb_literal")),
+        seq(ref("rb_name"), ".", alt("empty?", "nil?", "any?", "zero?", "valid?", "include?(x)")),
+        seq(ref("rb_name"), SP, "&&", SP, ref("rb_name"), ".", alt("active?", "present?")),
+    ),
+    "rb_expression": alt(
+        ref("rb_literal"),
+        ref("rb_name"),
+        binary("rb_name", ["+", "-", "*", "/", "%", "<<"], "rb_expression"),
+        seq("[", ref("rb_literal"), ",", SP, ref("rb_literal"), "]"),
+        seq("{", SP, ref("rb_name"), ":", SP, ref("rb_literal"), SP, "}"),
+        seq(ref("rb_name"), SP, "||", SP, ref("rb_literal")),
+        seq(ref("rb_class_name"), ".new"),
+        flag("strings", ref("rb_interpolation")),
+    ),
+    "rb_literal": alt(
+        flag("numbers", ref("rb_number")),
+        flag("strings", ref("rb_string")),
+        ref("rb_symbol"),
+        kw("nil"), kw("true"), kw("false"),
+    ),
+    "rb_symbol": string(seq(":", ref("rb_name"))),
+    "rb_number": number(ref("numeric_literal")),
+    "rb_int": number(ref("integer_dec_literal")),
+    "rb_string": string(alt(
+        seq('"', ref("generic_string_content"), '"'),
+        seq("'", ref("generic_string_content"), "'"),
+    )),
+    "rb_interpolation": string(seq(
+        '"', alt("Hello,", "Total:", "Saved", "User"), SP, "#{", ref("rb_name"), "}", '"',
+    )),
+    "rb_name": ref("generic_variable_name"),
+    "rb_class_name": ref("generic_class_name"),
+    "rb_comment": comment(seq("# ", ref("comment_text"))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):

@@ -37,5 +37,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "ruby",
+    "name": "Ruby",
+    "grammar": [
+      "lang_ruby",
+      "_names",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]

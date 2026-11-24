@@ -402,6 +402,7 @@ mod tests {
         ("kotlin", &["fun ", "val ", "?."]),
         ("swift", &["func ", "let ", "guard let"]),
         ("dart", &["final ", "=> ", "?? "]),
+        ("ruby", &["def ", " end", "do |"]),
     ];
 
     #[test]
