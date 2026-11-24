@@ -111,8 +111,9 @@ Keeper detects how many colors your terminal shows, and you can choose in the se
 - **16 colors** use the terminal's own background and text colors, with the basic
   colors for highlights. Keeper picks this on the Linux console and older terminals.
 - **No color** shows typed text dimmed, errors underlined, and the caret and the next
-  key in reverse video. Keeper picks this when `NO_COLOR` is set or `TERM` is `dumb`; a
-  color mode chosen in the settings wins over `NO_COLOR`.
+  key in reverse video, and charts draw their target dotted. Keeper picks this when
+  `NO_COLOR` is set, or `TERM` is `dumb` or a VT100 or VT220; a color mode chosen in the
+  settings wins over `NO_COLOR`.
 
 ### Your own code
 

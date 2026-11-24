@@ -721,7 +721,8 @@ fn speed_charts(
             .data(&speed_points),
         Dataset::default()
             .name("target")
-            .marker(Marker::Braille)
+            // Without colors, a dotted target tells it from the speed line.
+            .marker(target_marker(s))
             .graph_type(GraphType::Line)
             .style(Style::new().fg(s.color(s.palette.chart_threshold)))
             .data(&target_points),
@@ -870,7 +871,8 @@ fn key_speed_chart(
             .data(&points),
         Dataset::default()
             .name("target")
-            .marker(Marker::Braille)
+            // Without colors, a dotted target tells it from the speed line.
+            .marker(target_marker(s))
             .graph_type(GraphType::Line)
             .style(Style::new().fg(s.color(s.palette.chart_threshold)))
             .data(&target_points),
@@ -1218,6 +1220,16 @@ pub fn current_streak(days: &std::collections::BTreeMap<NaiveDate, u64>, today: 
     n
 }
 
+/// The marker of a target line: dotted when there are no colors to tell it
+/// from the line it is drawn with.
+fn target_marker(s: &Styles) -> Marker {
+    if s.monochrome() {
+        Marker::Dot
+    } else {
+        Marker::Braille
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1339,6 +1351,13 @@ mod tests {
             profile.handle_key(key(KeyCode::Esc), &results),
             ProfileAction::Back
         );
+    }
+
+    #[test]
+    fn target_lines_are_dotted_without_colors() {
+        let styles = |mode| Styles::new(Theme::get("dark"), mode);
+        assert_eq!(target_marker(&styles(ColorMode::Monochrome)), Marker::Dot);
+        assert_eq!(target_marker(&styles(ColorMode::Ansi16)), Marker::Braille);
     }
 
     #[test]

@@ -42,25 +42,27 @@ impl ColorDepth {
                 }
                 let colorterm = var("COLORTERM").unwrap_or_default().to_lowercase();
                 let term = var("TERM").unwrap_or_default();
-                if term == "dumb" {
+                // TERM names a terminal that cannot do more, which wins over
+                // a COLORTERM passed along from another terminal.
+                if term == "dumb" || term.starts_with("vt") {
+                    // The VT100 and VT220 show no colors.
                     ColorDepth::Monochrome
+                } else if term == "linux"
+                    || term == "ansi"
+                    || term == "xterm-color"
+                    || term.contains("16color")
+                    || term.starts_with("cons")
+                {
+                    // The Linux console and old color terminals.
+                    ColorDepth::Ansi16
                 } else if colorterm.contains("truecolor")
                     || colorterm.contains("24bit")
                     || term.contains("direct")
                 {
                     ColorDepth::Truecolor
-                } else if term.contains("256") {
-                    ColorDepth::Ansi256
-                } else if term == "linux"
-                    || term == "ansi"
-                    || term == "xterm-color"
-                    || term.contains("16color")
-                    || term.starts_with("vt")
-                    || term.starts_with("cons")
-                {
-                    // The Linux console and old terminals.
-                    ColorDepth::Ansi16
                 } else {
+                    // xterm-256color, tmux-256color and the like, and the
+                    // safest guess for any other terminal.
                     ColorDepth::Ansi256
                 }
             }
@@ -442,7 +444,15 @@ mod tests {
         assert_eq!(detect(auto, &[("TERM", "xterm")]), Ansi256);
         assert_eq!(detect(auto, &[]), Ansi256);
         assert_eq!(detect(auto, &[("TERM", "linux")]), Ansi16);
-        assert_eq!(detect(auto, &[("TERM", "vt220")]), Ansi16);
+        assert_eq!(detect(auto, &[("TERM", "vt220")]), Monochrome);
+        assert_eq!(detect(auto, &[("TERM", "vt100")]), Monochrome);
+        // TERM wins over a COLORTERM passed along from another terminal.
+        let console = [("TERM", "linux"), ("COLORTERM", "truecolor")];
+        assert_eq!(detect(auto, &console), Ansi16);
+        assert_eq!(
+            detect(auto, &[("TERM", "vt220"), ("COLORTERM", "24bit")]),
+            Monochrome
+        );
         assert_eq!(detect(auto, &[("TERM", "xterm-16color")]), Ansi16);
         assert_eq!(detect(auto, &[("TERM", "dumb")]), Monochrome);
         // NO_COLOR turns colors off unless it is empty.

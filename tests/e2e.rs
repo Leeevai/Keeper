@@ -674,6 +674,19 @@ fn survives_resizing() {
     assert!(term.quit());
 }
 
+/// The row and column of the first character of the lesson text.
+fn first_text_cell(term: &Term) -> (u16, u16) {
+    let screen = term.screen();
+    let lines: Vec<&str> = screen.lines().collect();
+    let top = lines
+        .iter()
+        .position(|l| l.contains('╭'))
+        .expect("a text box");
+    let left = lines[top].chars().position(|c| c == '╭').unwrap();
+    // The text starts after the border and one column of padding.
+    (top as u16 + 1, left as u16 + 2)
+}
+
 /// Every cell of the screen, as (row, column, cell).
 fn cells(term: &Term) -> Vec<(u16, u16, vt100::Cell)> {
     let screen = term.parser.screen();
@@ -705,21 +718,27 @@ fn turns_colors_off_with_no_color() {
         "colored cells: {colored:?}\n{}",
         term.screen()
     );
-    // The caret and the key to press are in reverse video.
-    let reversed = cells(&term).iter().filter(|(_, _, c)| c.inverse()).count();
-    assert!(reversed >= 2, "{}", term.screen());
-    // A wrong key is underlined in the text.
+    // The caret, on the first character of the lesson, is in reverse video.
     let lesson = term.box_text();
-    let wrong = if lesson.starts_with('q') { "z" } else { "q" };
+    let first = lesson.chars().next().unwrap();
+    let (row, col) = first_text_cell(&term);
+    let caret = term.parser.screen().cell(row, col).unwrap().clone();
+    assert_eq!(caret.contents(), first.to_string(), "{}", term.screen());
+    assert!(caret.inverse() && !caret.underline(), "{}", term.screen());
+    // So is the key to press, below the text.
+    let label = first.to_uppercase().to_string();
+    let key = cells(&term)
+        .into_iter()
+        .find(|(r, _, c)| *r > row + 1 && c.contents() == label)
+        .expect("the key on the keyboard");
+    assert!(key.2.inverse(), "{}", term.screen());
+    // A wrong key stops the caret and underlines it.
+    let wrong = if first == 'q' { "z" } else { "q" };
     term.type_text(wrong, Duration::from_millis(60));
     term.pump(Duration::from_millis(200));
-    assert!(
-        cells(&term)
-            .iter()
-            .any(|(_, _, c)| c.underline() && c.bold()),
-        "{}",
-        term.screen()
-    );
+    let caret = term.parser.screen().cell(row, col).unwrap().clone();
+    assert_eq!(caret.contents(), first.to_string());
+    assert!(caret.inverse() && caret.underline(), "{}", term.screen());
     assert!(term.quit());
 }
 
