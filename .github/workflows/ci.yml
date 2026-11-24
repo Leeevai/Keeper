@@ -39,11 +39,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # The version comes from Cargo.toml, so the check follows the manifest.
+      # Cargo reads the version from Cargo.toml, whatever its TOML syntax,
+      # so the check follows the manifest.
       - name: Read the minimum Rust version
         id: msrv
         run: |
-          version=$(sed -n 's/^rust-version *= *"\(.*\)"/\1/p' Cargo.toml)
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "keeper") | .rust_version // empty')
           test -n "$version" || { echo "Cargo.toml has no rust-version"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install the ALSA headers
