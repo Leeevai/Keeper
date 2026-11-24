@@ -1113,6 +1113,22 @@ fn calendar(
         Rgb(60, 60, 60)
     };
     let full = s.palette.fast_key;
+    // A day with no practice (`None`), or with practice for a part of the
+    // daily goal. Without colors, the symbols show how much.
+    let cell = |part: Option<f64>| -> (&'static str, Style) {
+        if s.monochrome() {
+            return match part {
+                None => ("·", s.dim),
+                Some(t) if t < 1.0 => ("□", s.text),
+                Some(_) => ("■", s.value),
+            };
+        }
+        let color = match part {
+            None => base,
+            Some(t) => base.lerp(full, 0.3 + 0.7 * t.clamp(0.0, 1.0)),
+        };
+        ("■", Style::new().fg(s.color(color)))
+    };
     let x0 = area.x + 4;
     // Month labels.
     let mut last_month = 0;
@@ -1140,15 +1156,19 @@ fn calendar(
                 continue;
             }
             let time = days.get(&date).copied().unwrap_or(0);
-            let style = if time > 0 {
+            let part = if time > 0 {
                 active_days += 1;
                 total += time;
-                let t = (time as f64 / goal_ms).clamp(0.0, 1.0);
-                Style::new().fg(s.color(base.lerp(full, 0.3 + 0.7 * t)))
+                Some(time as f64 / goal_ms)
             } else {
-                Style::new().fg(s.color(base))
+                None
             };
-            let symbol = if date == today { "◆" } else { "■" };
+            let (symbol, style) = cell(part);
+            let symbol = match (date == today, s.monochrome(), part) {
+                (true, true, None) => "◇",
+                (true, _, _) => "◆",
+                _ => symbol,
+            };
             buf.set_string(x0 + (w * 2) as u16, area.y + 1 + d as u16, symbol, style);
         }
     }
@@ -1165,13 +1185,14 @@ fn calendar(
     let mut x = area.x + area.width.saturating_sub(24);
     buf.set_string(x, area.y + 10, "Less ", s.name);
     x += 5;
-    for t in [0.0, 0.3, 0.6, 1.0] {
-        let color = if t == 0.0 {
-            base
-        } else {
-            base.lerp(full, 0.3 + 0.7 * t)
-        };
-        buf.set_string(x, area.y + 10, "■ ", Style::new().fg(s.color(color)));
+    let parts: &[Option<f64>] = if s.monochrome() {
+        &[None, Some(0.5), Some(1.0)]
+    } else {
+        &[None, Some(0.3), Some(0.6), Some(1.0)]
+    };
+    for &part in parts {
+        let (symbol, style) = cell(part);
+        buf.set_string(x, area.y + 10, symbol, style);
         x += 2;
     }
     buf.set_string(x, area.y + 10, "More", s.name);

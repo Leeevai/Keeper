@@ -16,24 +16,50 @@ use crate::theme::{Palette, Rgb, Theme};
 pub enum ColorDepth {
     Truecolor,
     Ansi256,
+    /// The 16 basic colors.
+    Ansi16,
+    /// No colors at all.
+    Monochrome,
 }
 
 impl ColorDepth {
-    /// Detects 24-bit color support from the environment.
+    /// The colors to use in the given mode, detected from the environment
+    /// for `ColorMode::Auto`.
     pub fn detect(mode: ColorMode) -> ColorDepth {
+        Self::detect_with(mode, |name| std::env::var(name).ok())
+    }
+
+    fn detect_with(mode: ColorMode, var: impl Fn(&str) -> Option<String>) -> ColorDepth {
         match mode {
             ColorMode::Truecolor => ColorDepth::Truecolor,
             ColorMode::Ansi256 => ColorDepth::Ansi256,
+            ColorMode::Ansi16 => ColorDepth::Ansi16,
+            ColorMode::Monochrome => ColorDepth::Monochrome,
             ColorMode::Auto => {
-                let colorterm = std::env::var("COLORTERM")
-                    .unwrap_or_default()
-                    .to_lowercase();
-                let term = std::env::var("TERM").unwrap_or_default();
-                if colorterm.contains("truecolor")
+                // https://no-color.org: a chosen color mode still wins.
+                if var("NO_COLOR").is_some_and(|v| !v.is_empty()) {
+                    return ColorDepth::Monochrome;
+                }
+                let colorterm = var("COLORTERM").unwrap_or_default().to_lowercase();
+                let term = var("TERM").unwrap_or_default();
+                if term == "dumb" {
+                    ColorDepth::Monochrome
+                } else if colorterm.contains("truecolor")
                     || colorterm.contains("24bit")
                     || term.contains("direct")
                 {
                     ColorDepth::Truecolor
+                } else if term.contains("256") {
+                    ColorDepth::Ansi256
+                } else if term == "linux"
+                    || term == "ansi"
+                    || term == "xterm-color"
+                    || term.contains("16color")
+                    || term.starts_with("vt")
+                    || term.starts_with("cons")
+                {
+                    // The Linux console and old terminals.
+                    ColorDepth::Ansi16
                 } else {
                     ColorDepth::Ansi256
                 }
@@ -72,14 +98,47 @@ pub struct Styles {
 
 impl Styles {
     pub fn new(theme: &Theme, mode: ColorMode) -> Self {
-        let depth = ColorDepth::detect(mode);
+        Self::with_depth(theme, ColorDepth::detect(mode))
+    }
+
+    pub fn with_depth(theme: &Theme, depth: ColorDepth) -> Self {
         let c = |rgb: Rgb| to_color(depth, rgb);
-        match &theme.colors {
-            Some(p) => {
+        // Without theme colors, the highlights come from the light palette,
+        // which reads well on both light and dark terminal backgrounds.
+        let palette = theme
+            .colors
+            .clone()
+            .unwrap_or_else(|| Theme::get("light").colors.clone().expect("light palette"));
+        match (&theme.colors, depth) {
+            (_, ColorDepth::Monochrome) => Styles {
+                depth,
+                palette,
+                themed: false,
+                base: Style::new(),
+                panel: Style::new(),
+                border: Style::new(),
+                title: Style::new().add_modifier(Modifier::BOLD),
+                tab: Style::new(),
+                tab_active: Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
+                text: Style::new(),
+                hit: Style::new().add_modifier(Modifier::DIM),
+                miss: Style::new().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                garbage: Style::new().add_modifier(Modifier::CROSSED_OUT | Modifier::UNDERLINED),
+                special: Style::new().add_modifier(Modifier::DIM),
+                name: Style::new(),
+                value: Style::new().add_modifier(Modifier::BOLD),
+                more: Style::new(),
+                less: Style::new(),
+                accent: Style::new().add_modifier(Modifier::BOLD),
+                dim: Style::new().add_modifier(Modifier::DIM),
+                selected: Style::new().add_modifier(Modifier::REVERSED),
+                error: Style::new().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            },
+            (Some(p), ColorDepth::Truecolor | ColorDepth::Ansi256) => {
                 let base = Style::new().fg(c(p.text)).bg(c(p.background));
                 Styles {
                     depth,
-                    palette: p.clone(),
+                    palette,
                     themed: true,
                     base,
                     panel: Style::new().fg(c(p.text)).bg(c(p.panel)),
@@ -107,38 +166,42 @@ impl Styles {
                     error: Style::new().fg(c(p.error)).add_modifier(Modifier::BOLD),
                 }
             }
-            None => {
-                // The terminal's own colors, with accents that read well on
-                // both light and dark backgrounds.
-                let p = Theme::get("light").colors.clone().expect("light palette");
-                Styles {
-                    depth,
-                    palette: p.clone(),
-                    themed: false,
-                    base: Style::new(),
-                    panel: Style::new(),
-                    border: Style::new().fg(Color::DarkGray),
-                    title: Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-                    tab: Style::new().fg(Color::Gray),
-                    tab_active: Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
-                    text: Style::new(),
-                    hit: Style::new().fg(Color::DarkGray),
-                    miss: Style::new().fg(Color::Red),
-                    garbage: Style::new()
-                        .fg(Color::Red)
-                        .add_modifier(Modifier::CROSSED_OUT),
-                    special: Style::new().fg(Color::DarkGray),
-                    name: Style::new().fg(Color::Gray),
-                    value: Style::new().add_modifier(Modifier::BOLD),
-                    more: Style::new().fg(Color::Green),
-                    less: Style::new().fg(Color::Red),
-                    accent: Style::new().fg(Color::Cyan),
-                    dim: Style::new().fg(Color::DarkGray),
-                    selected: Style::new().add_modifier(Modifier::REVERSED),
-                    error: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
-                }
-            }
+            // The terminal's own background and text, with the basic colors
+            // for accents: the system theme, and any theme in 16 colors,
+            // whose backgrounds would collapse into a few flat shades.
+            _ => Styles {
+                depth,
+                palette,
+                themed: false,
+                base: Style::new(),
+                panel: Style::new(),
+                border: Style::new().fg(Color::DarkGray),
+                title: Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                tab: Style::new().fg(Color::Gray),
+                tab_active: Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
+                text: Style::new(),
+                hit: Style::new().fg(Color::DarkGray),
+                miss: Style::new().fg(Color::Red),
+                garbage: Style::new()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::CROSSED_OUT),
+                special: Style::new().fg(Color::DarkGray),
+                name: Style::new().fg(Color::Gray),
+                value: Style::new().add_modifier(Modifier::BOLD),
+                more: Style::new().fg(Color::Green),
+                less: Style::new().fg(Color::Red),
+                accent: Style::new().fg(Color::Cyan),
+                dim: Style::new().fg(Color::DarkGray),
+                selected: Style::new().add_modifier(Modifier::REVERSED),
+                error: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
+            },
         }
+    }
+
+    /// Whether colors are off and states show as bold, underline and
+    /// reverse video instead.
+    pub fn monochrome(&self) -> bool {
+        self.depth == ColorDepth::Monochrome
     }
 
     pub fn color(&self, rgb: Rgb) -> Color {
@@ -154,6 +217,9 @@ impl Styles {
 
     /// A style with the given background and a readable foreground.
     pub fn on(&self, bg: Rgb) -> Style {
+        if self.monochrome() {
+            return Style::new();
+        }
         Style::new().bg(self.color(bg)).fg(self.color(contrast(bg)))
     }
 
@@ -173,6 +239,13 @@ impl Styles {
 
     pub fn syntax(&self, cls: Option<Class>) -> Style {
         let p = &self.palette;
+        if self.monochrome() {
+            return match cls {
+                Some(Class::Keyword) => Style::new().add_modifier(Modifier::BOLD),
+                Some(Class::Comment) => Style::new().add_modifier(Modifier::DIM),
+                _ => self.text,
+            };
+        }
         match cls {
             Some(Class::Keyword) => Style::new().fg(self.color(p.syntax_keyword)),
             Some(Class::String) => Style::new().fg(self.color(p.syntax_string)),
@@ -198,6 +271,27 @@ fn to_color(depth: ColorDepth, rgb: Rgb) -> Color {
     match depth {
         ColorDepth::Truecolor => Color::Rgb(rgb.0, rgb.1, rgb.2),
         ColorDepth::Ansi256 => Color::Indexed(rgb.to_ansi256()),
+        // The named colors, written as the escape codes that every color
+        // terminal understands (30 to 37 and 90 to 97).
+        ColorDepth::Ansi16 => [
+            Color::Black,
+            Color::Red,
+            Color::Green,
+            Color::Yellow,
+            Color::Blue,
+            Color::Magenta,
+            Color::Cyan,
+            Color::Gray,
+            Color::DarkGray,
+            Color::LightRed,
+            Color::LightGreen,
+            Color::LightYellow,
+            Color::LightBlue,
+            Color::LightMagenta,
+            Color::LightCyan,
+            Color::White,
+        ][rgb.to_ansi16() as usize],
+        ColorDepth::Monochrome => Color::Reset,
     }
 }
 
@@ -296,7 +390,9 @@ mod tests {
         for theme in Theme::all() {
             for mode in ColorMode::ALL {
                 let styles = Styles::new(theme, mode);
-                assert_eq!(styles.themed, theme.colors.is_some());
+                let full_color =
+                    matches!(styles.depth, ColorDepth::Truecolor | ColorDepth::Ansi256);
+                assert_eq!(styles.themed, theme.colors.is_some() && full_color);
                 let _ = styles.confidence_rgb(0.5);
             }
         }
@@ -304,6 +400,80 @@ mod tests {
         assert!(matches!(s.color(Rgb(255, 0, 0)), Color::Indexed(196)));
         assert_eq!(contrast(Rgb(255, 255, 255)), Rgb(20, 20, 20));
         assert_eq!(contrast(Rgb(0, 0, 0)), Rgb(245, 245, 245));
+    }
+
+    #[test]
+    fn detects_the_colors_of_the_terminal() {
+        let detect = |mode, vars: &[(&str, &str)]| {
+            let vars: Vec<(String, String)> = vars
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            ColorDepth::detect_with(mode, |name| {
+                vars.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone())
+            })
+        };
+        use ColorDepth::*;
+        let auto = ColorMode::Auto;
+        assert_eq!(
+            detect(
+                auto,
+                &[("COLORTERM", "truecolor"), ("TERM", "xterm-256color")]
+            ),
+            Truecolor
+        );
+        assert_eq!(detect(auto, &[("TERM", "xterm-direct")]), Truecolor);
+        assert_eq!(detect(auto, &[("TERM", "xterm-256color")]), Ansi256);
+        assert_eq!(detect(auto, &[("TERM", "tmux-256color")]), Ansi256);
+        assert_eq!(detect(auto, &[("TERM", "xterm")]), Ansi256);
+        assert_eq!(detect(auto, &[]), Ansi256);
+        assert_eq!(detect(auto, &[("TERM", "linux")]), Ansi16);
+        assert_eq!(detect(auto, &[("TERM", "vt220")]), Ansi16);
+        assert_eq!(detect(auto, &[("TERM", "xterm-16color")]), Ansi16);
+        assert_eq!(detect(auto, &[("TERM", "dumb")]), Monochrome);
+        // NO_COLOR turns colors off unless it is empty.
+        let no_color = [("NO_COLOR", "1"), ("COLORTERM", "truecolor")];
+        assert_eq!(detect(auto, &no_color), Monochrome);
+        assert_eq!(
+            detect(auto, &[("NO_COLOR", ""), ("COLORTERM", "truecolor")]),
+            Truecolor
+        );
+        // A color mode chosen in the settings wins over the environment.
+        assert_eq!(detect(ColorMode::Ansi16, &no_color), Ansi16);
+        assert_eq!(
+            detect(ColorMode::Monochrome, &[("COLORTERM", "truecolor")]),
+            Monochrome
+        );
+    }
+
+    #[test]
+    fn basic_and_no_colors() {
+        let dark = Theme::get("dark");
+        let s = Styles::with_depth(dark, ColorDepth::Ansi16);
+        assert!(!s.themed);
+        assert_eq!(s.color(Rgb::hex(0x60d788)), Color::LightGreen);
+        assert_eq!(s.color(Rgb(0, 0, 0)), Color::Black);
+        // The theme still picks the highlight colors.
+        assert_eq!(s.palette, dark.colors.clone().unwrap());
+        let s = Styles::with_depth(dark, ColorDepth::Monochrome);
+        assert!(s.monochrome() && !s.themed);
+        assert_eq!(s.color(Rgb(255, 0, 0)), Color::Reset);
+        assert_eq!(s.on(Rgb(255, 0, 0)), Style::new());
+        for style in [
+            s.base, s.text, s.hit, s.miss, s.garbage, s.selected, s.error,
+        ] {
+            assert_eq!(style.fg, None);
+            assert_eq!(style.bg, None);
+        }
+        // Typed text, errors and the selection still look different.
+        assert_ne!(s.hit, s.text);
+        assert_ne!(s.miss, s.text);
+        assert_ne!(s.miss, s.hit);
+        assert_ne!(s.selected, s.text);
+        assert_eq!(
+            s.syntax(Some(Class::Keyword)),
+            Style::new().add_modifier(Modifier::BOLD)
+        );
     }
 
     #[test]
