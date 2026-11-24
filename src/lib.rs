@@ -4,6 +4,7 @@ pub mod app;
 pub mod assets;
 pub mod code;
 pub mod content;
+pub mod files;
 pub mod keyboard;
 pub mod language;
 pub mod lesson;

@@ -298,6 +298,11 @@ impl<S: WordSource> WordSource for MangledWords<'_, S> {
     }
 }
 
+/// How many characters a lesson has, from 100 to 200.
+fn lesson_chars(settings: &Settings) -> usize {
+    100 + (settings.lesson_length * 100.0).round() as usize
+}
+
 /// Joins words until the lesson is long enough, repeating each word.
 fn generate_fragment(
     settings: &Settings,
@@ -305,7 +310,7 @@ fn generate_fragment(
     repeat_words: u32,
     rng: &mut dyn Rng,
 ) -> String {
-    let length = 100 + (settings.lesson_length * 100.0).round() as usize;
+    let length = lesson_chars(settings);
     let mut words: Vec<String> = Vec::new();
     let mut words_length = 0;
     loop {
@@ -340,6 +345,10 @@ enum Kind {
         syntax: &'static Syntax,
         flags: HashSet<String>,
     },
+    /// Lines of the user's own source files.
+    Files {
+        files: Vec<Vec<String>>,
+    },
 }
 
 /// Generates the text of lessons and tracks which keys are being learned.
@@ -352,6 +361,9 @@ pub struct Lesson {
     model: Arc<PhoneticModel>,
     letters: Vec<Letter>,
     kind: Kind,
+    /// Something the student should know about this lesson, such as a
+    /// folder without code to practice.
+    pub notice: Option<String>,
 }
 
 impl Lesson {
@@ -368,6 +380,11 @@ impl Lesson {
             .cloned()
             .collect();
         let allowed = |cp: u32| code_points.has(cp);
+        let mut notice = None;
+        let code = || Kind::Code {
+            syntax: Syntax::get(&settings.code_syntax),
+            flags: settings.code_flags.iter().cloned().collect(),
+        };
         let (letters, kind) = match settings.lesson_type {
             LessonType::Guided => {
                 let words: Vec<String> = filter_word_list(word_list(&language.id), allowed)
@@ -438,13 +455,30 @@ impl Lesson {
                 )
             }
             LessonType::Numbers => (Letter::digits(), Kind::Numbers),
-            LessonType::Code => (
-                Letter::programming(),
-                Kind::Code {
-                    syntax: Syntax::get(&settings.code_syntax),
-                    flags: settings.code_flags.iter().cloned().collect(),
-                },
-            ),
+            LessonType::Code => (Letter::programming(), code()),
+            LessonType::Files => {
+                let path = settings.files_path.trim();
+                let shown = crate::files::printable(path);
+                let read = (!path.is_empty()).then(|| {
+                    crate::files::read(&crate::files::expand_home(path), |c| {
+                        code_points.has(u32::from(c))
+                    })
+                });
+                match read {
+                    Some(Ok(files)) if !files.is_empty() => {
+                        (Letter::programming(), Kind::Files { files })
+                    }
+                    // Practice the chosen code syntax until there is code.
+                    _ => {
+                        notice = Some(match read {
+                            None => "Choose a file or folder of your code in the settings".into(),
+                            Some(Err(e)) => format!("Cannot read {shown}: {e}"),
+                            Some(Ok(_)) => format!("No code to practice in {shown}"),
+                        });
+                        (Letter::programming(), code())
+                    }
+                }
+            }
         };
         Self {
             lesson_type: settings.lesson_type,
@@ -455,6 +489,7 @@ impl Lesson {
             model,
             letters,
             kind,
+            notice,
         }
     }
 
@@ -636,6 +671,9 @@ impl Lesson {
             }
             Kind::Numbers => plain(generate_numbers(settings.benford, rng)),
             Kind::Code { syntax, flags } => syntax.generate(flags, rng),
+            Kind::Files { files } => {
+                plain(crate::files::fragment(files, lesson_chars(settings), rng))
+            }
         }
     }
 }
@@ -1075,6 +1113,71 @@ mod tests {
         let keys = lesson.update(&lesson.key_stats(&[]));
         let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
         assert!(text.chars().count() > 50, "{text}");
+    }
+
+    #[test]
+    fn lessons_of_your_own_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let code: Vec<String> = (0..40)
+            .map(|i| format!("let value{i} = compute({i});"))
+            .collect();
+        std::fs::write(dir.path().join("main.rs"), code.join("\n    ")).unwrap();
+        // Russian letters cannot be typed on the US layout.
+        std::fs::write(dir.path().join("notes.md"), "привет мир\n").unwrap();
+        let mut lesson = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Files;
+            s.files_path = dir.path().display().to_string();
+        }));
+        assert_eq!(lesson.notice, None);
+        assert_eq!(lesson.letters()[0].label, "(");
+        assert_eq!(LessonType::Files.text_type(), TextType::Code);
+        let keys = lesson.update(&lesson.key_stats(&[]));
+        for seed in 0..10 {
+            let text = flatten(&lesson.generate(&keys, &mut Lcg::new(seed)));
+            assert!(text.starts_with("let value"), "{text}");
+            assert!(text.chars().count() >= 100, "{text}");
+            assert!(!text.contains("  ") && !text.contains('п'), "{text}");
+        }
+        // Without code to practice, the code syntax fills in, with a notice
+        // that says why.
+        let code_lesson = |seed| {
+            let mut lesson = Lesson::new(&settings(|s| s.lesson_type = LessonType::Code));
+            let keys = lesson.update(&lesson.key_stats(&[]));
+            flatten(&lesson.generate(&keys, &mut Lcg::new(seed)))
+        };
+        let empty = dir.path().join("empty");
+        std::fs::create_dir(&empty).unwrap();
+        let missing = dir.path().join("missing");
+        for (path, notice) in [
+            (
+                String::new(),
+                "Choose a file or folder of your code in the settings".to_string(),
+            ),
+            (
+                empty.display().to_string(),
+                format!("No code to practice in {}", empty.display()),
+            ),
+            (
+                missing.display().to_string(),
+                format!("Cannot read {}: ", missing.display()),
+            ),
+        ] {
+            let mut lesson = Lesson::new(&settings(|s| {
+                s.lesson_type = LessonType::Files;
+                s.files_path = path;
+            }));
+            let shown = lesson.notice.clone().unwrap();
+            assert!(shown.starts_with(&notice), "{shown}");
+            let keys = lesson.update(&lesson.key_stats(&[]));
+            let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
+            assert_eq!(text, code_lesson(1));
+        }
+        // A path is shown without the control characters it may hold.
+        let lesson = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Files;
+            s.files_path = "/no\x1b[2Jwhere".into();
+        }));
+        assert!(!lesson.notice.unwrap().contains('\x1b'));
     }
 
     #[test]
