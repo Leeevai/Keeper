@@ -123,6 +123,10 @@ pub const GRAMMARS: &[(&str, &str)] = &[
         "lang_ruby",
         include_str!("../assets/code/keeper/lang_ruby.json"),
     ),
+    (
+        "lang_elixir",
+        include_str!("../assets/code/keeper/lang_elixir.json"),
+    ),
 ];
 
 /// Code syntaxes written for Keeper, listed after keybr.com's.

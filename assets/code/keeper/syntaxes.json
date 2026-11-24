@@ -50,5 +50,18 @@
       "_comments"
     ],
     "start": "start"
+  },
+  {
+    "id": "elixir",
+    "name": "Elixir",
+    "grammar": [
+      "lang_elixir",
+      "_names",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
   }
 ]

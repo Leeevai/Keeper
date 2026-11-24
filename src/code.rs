@@ -403,6 +403,7 @@ mod tests {
         ("swift", &["func ", "let ", "guard let"]),
         ("dart", &["final ", "=> ", "?? "]),
         ("ruby", &["def ", " end", "do |"]),
+        ("elixir", &["defmodule ", "|> ", " do "]),
     ];
 
     #[test]

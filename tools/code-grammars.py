@@ -668,6 +668,141 @@ language("ruby", "Ruby", rules={
 
 
 # ---------------------------------------------------------------------------
+# Elixir
+
+language("elixir", "Elixir", rules={
+    "start": ref("ex_statement"),
+    "ex_statement": alt(
+        ref("ex_match"),
+        ref("ex_match"),
+        flag("defs", ref("ex_def")),
+        flag("defs", ref("ex_module")),
+        ref("ex_pipeline"),
+        ref("ex_case"),
+        ref("ex_if"),
+        ref("ex_call"),
+        flag("types", ref("ex_spec")),
+        flag("comments", ref("ex_comment")),
+    ),
+    "ex_match": seq(
+        alt(ref("ex_name"), ref("ex_tuple_pattern"), seq("%{", ref("ex_name"), ":", SP, ref("ex_name"), "}")),
+        SP, "=", SP, ref("ex_expression"),
+    ),
+    "ex_tuple_pattern": seq("{", ref("ex_atom"), ",", SP, ref("ex_name"), "}"),
+    "ex_def": alt(
+        seq(
+            alt(kw("def"), kw("defp")), SP, ref("ex_function_name"), "(", opt(ref("ex_params")), ")",
+            opt(seq(SP, kw("when"), SP, ref("ex_guard")), 0.25),
+            SP, kw("do"), SP, ref("ex_expression"), SP, kw("end"),
+        ),
+        seq(
+            alt(kw("def"), kw("defp")), SP, ref("ex_function_name"), "(", ref("ex_params"), "),",
+            SP, "do:", SP, ref("ex_expression"),
+        ),
+    ),
+    "ex_params": seq(ref("ex_param"), opt(seq(",", SP, ref("ex_param")))),
+    "ex_param": alt(
+        ref("ex_name"),
+        ref("ex_name"),
+        ref("ex_tuple_pattern"),
+        seq("%{", ref("ex_name"), ":", SP, ref("ex_name"), "}"),
+        seq("[head", SP, "|", SP, "tail]"),
+        seq(ref("ex_name"), SP, "\\\\", SP, ref("ex_literal")),
+    ),
+    "ex_guard": alt(
+        seq("is_", alt("integer", "binary", "list", "map", "atom"), "(", ref("ex_name"), ")"),
+        seq(ref("ex_name"), SP, alt(">", "<", ">=", "=="), SP, ref("ex_int_or_name")),
+    ),
+    "ex_module": alt(
+        seq(kw("defmodule"), SP, ref("ex_module_name"), SP, kw("do"), SP, ref("ex_module_body"), SP, kw("end")),
+        seq(kw("defstruct"), SP, "[", ref("ex_atom"), ",", SP, ref("ex_atom"), "]"),
+        seq(kw("alias"), SP, ref("ex_module_name")),
+        seq(kw("use"), SP, alt("GenServer", "Ecto.Schema", "Phoenix.Controller", "ExUnit.Case")),
+        seq(kw("import"), SP, alt("Ecto.Query", "Plug.Conn", "Enum", "String")),
+    ),
+    "ex_module_body": alt(
+        seq("@moduledoc", SP, alt(kw("false"), flag("strings", ref("ex_string")))),
+        seq(kw("use"), SP, "GenServer"),
+        seq(kw("alias"), SP, ref("ex_module_name")),
+        seq("@", ref("ex_name"), SP, ref("ex_literal")),
+    ),
+    "ex_module_name": seq(alt("MyApp", "Accounts", "Shop", "Blog", "Chat"), ".", ref("ex_class_name")),
+    "ex_pipeline": seq(
+        ref("ex_name"), SP, "|>", SP, ref("ex_stage"), SP, "|>", SP, ref("ex_stage"),
+        opt(seq(SP, "|>", SP, ref("ex_stage")), 0.4),
+    ),
+    "ex_stage": alt(
+        seq("Enum.", alt("map", "filter", "reject", "flat_map"), "(", ref("ex_fn"), ")"),
+        seq("Enum.", alt("sum", "count", "sort", "uniq", "reverse"), "()"),
+        seq("Enum.", alt("take", "drop", "chunk_every"), "(", ref("ex_int_or_name"), ")"),
+        seq("String.", alt("trim", "downcase", "upcase", "split"), "()"),
+        seq("Map.", alt("get", "fetch!", "delete"), "(", ref("ex_atom"), ")"),
+        seq(ref("ex_function_name"), "()"),
+    ),
+    "ex_fn": alt(
+        seq("&(&1", SP, alt("*", "+", "-"), SP, ref("ex_int_or_name"), ")"),
+        seq(kw("fn"), SP, ref("ex_name"), SP, "->", SP, ref("ex_name"), ".", ref("ex_name"), SP, kw("end")),
+        seq("&", ref("ex_function_name"), "/1"),
+        seq("&String.", alt("upcase", "trim"), "/1"),
+    ),
+    "ex_case": seq(
+        kw("case"), SP, ref("ex_call"), SP, kw("do"), SP, ref("ex_tuple_pattern"), SP, "->", SP,
+        ref("ex_name"), SP, "{:error,", SP, "reason}", SP, "->", SP, "{:error,", SP, "reason}", SP, kw("end"),
+    ),
+    "ex_if": seq(
+        alt(kw("if"), kw("unless")), SP, ref("ex_condition"), SP, kw("do"), SP, ref("ex_call"),
+        opt(seq(SP, kw("else"), SP, ref("ex_call")), 0.4), SP, kw("end"),
+    ),
+    "ex_condition": alt(
+        seq(ref("ex_name"), SP, alt("==", "!=", ">", "<", ">=", "<=", "==="), SP, ref("ex_literal")),
+        seq(ref("ex_name"), SP, kw("in"), SP, "[", ref("ex_atom"), ",", SP, ref("ex_atom"), "]"),
+        seq("is_nil(", ref("ex_name"), ")"),
+    ),
+    "ex_call": alt(
+        seq(ref("ex_module_name"), ".", ref("ex_function_name"), "(", opt(ref("ex_args")), ")"),
+        seq(ref("ex_function_name"), "(", opt(ref("ex_args")), ")"),
+        seq("IO.puts(", ref("ex_simple"), ")"),
+        seq("Logger.", alt("info", "debug", "error"), "(", ref("ex_simple"), ")"),
+    ),
+    "ex_args": seq(ref("ex_simple"), opt(seq(",", SP, ref("ex_simple")))),
+    "ex_expression": alt(
+        ref("ex_literal"),
+        ref("ex_name"),
+        ref("ex_call"),
+        seq("{", ref("ex_atom"), ",", SP, ref("ex_simple"), "}"),
+        seq("%{", ref("ex_name"), ":", SP, ref("ex_literal"), ",", SP, ref("ex_name"), ":", SP, ref("ex_literal"), "}"),
+        seq("[", ref("ex_literal"), ",", SP, ref("ex_literal"), "]"),
+        binary("ex_name", ["+", "-", "*", "<>", "++"], "ex_expression"),
+        seq("%", ref("ex_class_name"), "{", ref("ex_name"), ":", SP, ref("ex_literal"), "}"),
+        flag("strings", ref("ex_interpolation")),
+    ),
+    "ex_simple": alt(ref("ex_literal"), ref("ex_name")),
+    "ex_literal": alt(
+        flag("numbers", ref("ex_number")),
+        flag("strings", ref("ex_string")),
+        ref("ex_atom"),
+        kw("nil"), kw("true"), kw("false"),
+    ),
+    "ex_atom": string(seq(":", ref("ex_name"))),
+    "ex_number": number(alt(ref("integer_dec_literal"), ref("float_dec_literal"))),
+    "ex_int_or_name": alt(flag("numbers", number(ref("integer_dec_literal"))), ref("ex_name")),
+    "ex_string": string(seq('"', ref("generic_string_content"), '"')),
+    "ex_interpolation": string(seq(
+        '"', alt("Hello,", "Total:", "Got", "User"), SP, "#{", ref("ex_name"), "}", '"',
+    )),
+    "ex_spec": seq("@spec", SP, ref("ex_function_name"), "(", ref("ex_type"), ")", SP, "::", SP, ref("ex_type")),
+    "ex_type": alt(
+        "integer()", "String.t()", "boolean()", "map()", "list(integer())", "atom()",
+        "{:ok, term()} | {:error, term()}", "keyword()",
+    ),
+    "ex_name": ref("generic_variable_name"),
+    "ex_function_name": ref("snake_function_name"),
+    "ex_class_name": ref("generic_class_name"),
+    "ex_comment": comment(seq("# ", ref("comment_text"))),
+})
+
+
+# ---------------------------------------------------------------------------
 
 
 def write(name, rules):
