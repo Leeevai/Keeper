@@ -306,16 +306,30 @@ pub enum ColorMode {
     Truecolor,
     #[serde(rename = "256")]
     Ansi256,
+    /// The 16 basic colors, in the shades the terminal chooses.
+    #[serde(rename = "16")]
+    Ansi16,
+    /// No colors: bold, underline and reverse video only.
+    #[serde(rename = "none")]
+    Monochrome,
 }
 
 impl ColorMode {
-    pub const ALL: [ColorMode; 3] = [ColorMode::Auto, ColorMode::Truecolor, ColorMode::Ansi256];
+    pub const ALL: [ColorMode; 5] = [
+        ColorMode::Auto,
+        ColorMode::Truecolor,
+        ColorMode::Ansi256,
+        ColorMode::Ansi16,
+        ColorMode::Monochrome,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             ColorMode::Auto => "Detect",
             ColorMode::Truecolor => "24-bit color",
             ColorMode::Ansi256 => "256 colors",
+            ColorMode::Ansi16 => "16 colors",
+            ColorMode::Monochrome => "No color",
         }
     }
 }
@@ -729,6 +743,21 @@ mod tests {
             serde_json::from_str(r#"{"lesson.targetSpeed": 300, "x": 1}"#).unwrap();
         assert_eq!(partial.target_speed, 300);
         assert_eq!(partial.daily_goal, 30);
+        for (mode, name) in [
+            (ColorMode::Auto, "auto"),
+            (ColorMode::Ansi256, "256"),
+            (ColorMode::Ansi16, "16"),
+            (ColorMode::Monochrome, "none"),
+        ] {
+            let s = Settings {
+                color_mode: mode,
+                ..Default::default()
+            };
+            let json = serde_json::to_value(&s).unwrap();
+            assert_eq!(json["ui.colorMode"], name);
+            let back: Settings = serde_json::from_value(json).unwrap();
+            assert_eq!(back.color_mode, mode);
+        }
     }
 
     #[test]

@@ -96,9 +96,22 @@ The settings keep keybr's names, defaults and ranges.
 - **Layout emulation**: practice a layout without changing your system settings. Keys
   you type on your system layout (US by default) are translated into the practiced
   layout by key position. Turn it off if your system already uses that layout.
-- **Miscellaneous**: speed in words or characters per minute or second, nine themes
-  (System, which uses your terminal's colors, and keybr's Light, Dark, Gray, Yellow,
-  Garden, Coffee, Chocolate and Honey), 24-bit or 256 colors.
+- **Miscellaneous**: speed in words or characters per minute or second, 15 themes
+  (System, which uses your terminal's colors; keybr's Light, Dark, Gray, Yellow,
+  Garden, Coffee, Chocolate and Honey; and the dark editor palettes Dracula, Nord,
+  Gruvbox, Solarized, Catppuccin and Tokyo Night, whose accents also color the keys,
+  charts and code), and the terminal colors.
+
+### Terminal colors
+
+Keeper detects how many colors your terminal shows, and you can choose in the settings:
+
+- **24-bit color** and **256 colors** show the themes as designed.
+- **16 colors** use the terminal's own background and text colors, with the basic
+  colors for highlights. Keeper picks this on the Linux console and older terminals.
+- **No color** shows typed text dimmed, errors underlined, and the caret and the next
+  key in reverse video. Keeper picks this when `NO_COLOR` is set or `TERM` is `dumb`; a
+  color mode chosen in the settings wins over `NO_COLOR`.
 
 ### Your own code
 
