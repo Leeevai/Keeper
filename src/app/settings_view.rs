@@ -40,6 +40,7 @@ pub enum Field {
     CustomRandomize,
     CodeSyntax,
     CodeFlag(usize),
+    FilesPath,
     Benford,
     Capitals,
     Punctuators,
@@ -136,6 +137,7 @@ pub fn fields(s: &Settings) -> Vec<(Section, Field)> {
                 }
             }
         }
+        crate::settings::LessonType::Files => v.push((Section::Lessons, FilesPath)),
         crate::settings::LessonType::Numbers => v.push((Section::Lessons, Benford)),
     }
     if matches!(
@@ -224,6 +226,7 @@ impl Field {
             CustomRandomize => "Shuffle words".into(),
             CodeSyntax => "Syntax".into(),
             CodeFlag(i) => format!("Include {}", FLAGS[i]),
+            FilesPath => "File or folder".into(),
             Benford => "Benford's law".into(),
             Capitals => "Add capital letters".into(),
             Punctuators => "Add punctuation".into(),
@@ -309,6 +312,14 @@ impl Field {
             CustomRandomize => on_off(s.custom_randomize),
             CodeSyntax => Syntax::get(&s.code_syntax).name.clone(),
             CodeFlag(i) => on_off(s.code_flags.iter().any(|f| f == FLAGS[i])),
+            FilesPath if s.files_path.is_empty() => "Not set (Enter to choose)".into(),
+            FilesPath => {
+                // The end of a long path says the most.
+                let n = s.files_path.chars().count();
+                let path: String = s.files_path.chars().skip(n.saturating_sub(40)).collect();
+                let more = if n > 40 { "…" } else { "" };
+                format!("{more}{path} (Enter to edit)")
+            }
             Benford => on_off(s.benford),
             Capitals => percent(s.capitals),
             Punctuators => percent(s.punctuators),
@@ -399,7 +410,7 @@ impl Field {
             }
             BookLettersOnly => s.book_letters_only = !s.book_letters_only,
             BookLowercase => s.book_lowercase = !s.book_lowercase,
-            CustomText => {}
+            CustomText | FilesPath => {}
             CustomLettersOnly => s.custom_letters_only = !s.custom_letters_only,
             CustomLowercase => s.custom_lowercase = !s.custom_lowercase,
             CustomRandomize => s.custom_randomize = !s.custom_randomize,
@@ -543,6 +554,7 @@ impl Field {
                 crate::settings::LessonType::Custom => "Generate typing lessons from the words of your own custom text. All keys are included by default. This mode is for the pros.",
                 crate::settings::LessonType::Code => "Generate lessons that resemble the specified programming language syntax.",
                 crate::settings::LessonType::Numbers => "Practice numbers only.",
+                crate::settings::LessonType::Files => "Practice the code you write: lessons are a few lines at a time from your own source files, without indentation. All keys are included by default.",
             }
             .into(),
             NaturalWords => "Use the dictionary words as much as possible, and if not many such words are available, then use computer-generated pseudo-words. Natural words might be easier to type. Pseudo-words offer a much greater variety of letter combinations.".into(),
@@ -567,6 +579,7 @@ impl Field {
             CustomText => "Type or paste your own text. Press Enter to open the editor, then Ctrl+S to save it or Esc to cancel.".into(),
             CustomRandomize => "Put the words of the custom text in a random order.".into(),
             CodeSyntax => "The programming language syntax to imitate.".into(),
+            FilesPath => "A source file, or a folder whose source files are read, skipping hidden folders, dependencies and build output. Lines that cannot be typed on your keyboard are left out. Press Enter to type the path, or start Keeper with `keeper code <path>`.".into(),
             CodeFlag(i) => format!("Practice the {} of the programming language syntax.", FLAGS[i]),
             Benford => "Benford's law is an observation that in many real-life numerical data sets the leading digit is likely to be small.".into(),
             Capitals => "Adjust the amount of capital letters added to the lesson text. We recommend increasing this value only when all letters are above the target speed.".into(),
@@ -627,18 +640,37 @@ fn step_list_size(value: u32, delta: i32) -> u32 {
     (value as i32 + delta * step).clamp(10, 1000) as u32
 }
 
-/// A multi-line text editor for the custom text.
+/// A text editor for the custom text, multi-line, or for the path of your
+/// code, on one line.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Editor {
     pub text: Vec<char>,
     pub cursor: usize,
+    /// The setting being edited: the custom text or the path of your code.
+    pub field: Field,
 }
 
 impl Editor {
     pub fn new(text: &str) -> Self {
         let text: Vec<char> = text.chars().collect();
         let cursor = text.len();
-        Self { text, cursor }
+        Self {
+            text,
+            cursor,
+            field: Field::CustomText,
+        }
+    }
+
+    /// An editor for the path of your code, where Enter saves.
+    pub fn for_path(path: &str) -> Self {
+        Self {
+            field: Field::FilesPath,
+            ..Self::new(path)
+        }
+    }
+
+    fn single_line(&self) -> bool {
+        self.field == Field::FilesPath
     }
 
     pub fn insert(&mut self, s: &str) {
@@ -646,6 +678,9 @@ impl Editor {
         for c in s.chars() {
             if self.text.len() >= 10_000 {
                 break;
+            }
+            if self.single_line() && (c == '\n' || c == '\r') {
+                continue;
             }
             let c = if c == '\r' { '\n' } else { c };
             self.text.insert(self.cursor, c);
@@ -678,6 +713,7 @@ impl Editor {
                 self.cursor = 0;
             }
             KeyCode::Char(c) if !ctrl => self.insert(&c.to_string()),
+            KeyCode::Enter if self.single_line() => return Some(true),
             KeyCode::Enter => self.insert("\n"),
             KeyCode::Tab => self.insert(" "),
             KeyCode::Backspace if self.cursor > 0 => {
@@ -739,11 +775,14 @@ impl SettingsView {
             return match editor.handle_key(key) {
                 Some(true) => {
                     let text = editor.text();
+                    let mut s = settings.clone();
+                    if editor.field == Field::FilesPath {
+                        s.files_path = text.trim().to_string();
+                    } else {
+                        s.custom_text = text;
+                    }
                     self.editor = None;
-                    SettingsAction::Apply(Box::new(Settings {
-                        custom_text: text,
-                        ..settings.clone()
-                    }))
+                    SettingsAction::Apply(Box::new(s))
                 }
                 Some(false) => {
                     self.editor = None;
@@ -815,6 +854,9 @@ impl SettingsView {
             KeyCode::Enter | KeyCode::Char(' ') => {
                 if field == Field::CustomText {
                     self.editor = Some(Editor::new(&settings.custom_text));
+                    SettingsAction::None
+                } else if field == Field::FilesPath {
+                    self.editor = Some(Editor::for_path(&settings.files_path));
                     SettingsAction::None
                 } else {
                     change(1)
@@ -894,7 +936,7 @@ impl SettingsView {
             } else {
                 s.value
             };
-            let arrows = if is_selected && *f != Field::CustomText {
+            let arrows = if is_selected && !matches!(f, Field::CustomText | Field::FilesPath) {
                 ("‹ ", " ›")
             } else {
                 ("  ", "  ")
@@ -1062,9 +1104,20 @@ impl SettingsView {
             .border_type(BorderType::Rounded)
             .border_style(s.accent)
             .style(s.base)
-            .title(Span::styled(" Custom text ", s.title))
+            .title(Span::styled(
+                if editor.single_line() {
+                    " File or folder of your code "
+                } else {
+                    " Custom text "
+                },
+                s.title,
+            ))
             .title_bottom(Span::styled(
-                " Ctrl+S save · Esc cancel · Ctrl+U clear · paste with your terminal ",
+                if editor.single_line() {
+                    " Enter save · Esc cancel · Ctrl+U clear · paste with your terminal "
+                } else {
+                    " Ctrl+S save · Esc cancel · Ctrl+U clear · paste with your terminal "
+                },
                 s.name,
             ));
         let inner = block.inner(rect);
@@ -1322,6 +1375,38 @@ mod tests {
         press(&mut view, &mut s, KeyCode::Char('x'));
         assert_eq!(press(&mut view, &mut s, KeyCode::Esc), SettingsAction::None);
         assert!(view.editor.is_none());
+    }
+
+    #[test]
+    fn your_code_path_editor() {
+        let mut view = SettingsView::default();
+        let mut s = Settings {
+            lesson_type: LessonType::Code,
+            ..Settings::default()
+        };
+        select(&mut view, &s, Field::LessonType);
+        press(&mut view, &mut s, KeyCode::Right);
+        assert_eq!(s.lesson_type, LessonType::Files);
+        assert_eq!(Field::FilesPath.value(&s), "Not set (Enter to choose)");
+        select(&mut view, &s, Field::FilesPath);
+        press(&mut view, &mut s, KeyCode::Enter);
+        let editor = view.editor.as_ref().expect("an editor");
+        assert_eq!(editor.field, Field::FilesPath);
+        // A pasted line break is dropped, and Enter saves.
+        view.handle_paste("~/code/project\n");
+        press(&mut view, &mut s, KeyCode::Char('/'));
+        assert_eq!(view.editor.as_ref().unwrap().text(), "~/code/project/");
+        press(&mut view, &mut s, KeyCode::Enter);
+        assert!(view.editor.is_none());
+        assert_eq!(s.files_path, "~/code/project/");
+        assert_eq!(s.custom_text, Settings::default().custom_text);
+        assert_eq!(
+            Field::FilesPath.value(&s),
+            "~/code/project/ (Enter to edit)"
+        );
+        let long = format!("/{}", "folder/".repeat(10));
+        s.files_path = long;
+        assert!(Field::FilesPath.value(&s).starts_with("…"));
     }
 
     #[test]

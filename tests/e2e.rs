@@ -270,6 +270,62 @@ fn escape_restarts_and_ctrl_n_skips() {
 }
 
 #[test]
+fn practices_your_own_code() {
+    let home = tempfile::tempdir().unwrap();
+    let code = tempfile::tempdir().unwrap();
+    let lines: Vec<String> = (0..30)
+        .map(|i| format!("total += item{i}.price * {i};"))
+        .collect();
+    std::fs::create_dir_all(code.path().join("src")).unwrap();
+    std::fs::write(code.path().join("src/cart.js"), lines.join("\n\t")).unwrap();
+    // Dependencies and hidden folders are not your code.
+    std::fs::create_dir_all(code.path().join("node_modules/dep")).unwrap();
+    std::fs::write(
+        code.path().join("node_modules/dep/index.js"),
+        "dependency();\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(code.path().join(".git")).unwrap();
+    std::fs::write(code.path().join(".git/hook.sh"), "hidden\n").unwrap();
+    let settings = serde_json::json!({
+        "lesson.type": "files",
+        "lesson.files.path": code.path().display().to_string(),
+    });
+    std::fs::write(home.path().join("settings.json"), settings.to_string()).unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(term.screen().contains("Your code"), "{}", term.screen());
+    let lesson = term.box_text();
+    assert!(lesson.starts_with("total += item"), "{lesson}");
+    assert!(!lesson.contains("dependency") && !lesson.contains("hidden"));
+    term.type_text(&lesson, Duration::from_millis(40));
+    assert!(
+        term.wait_for("Speed:", Duration::from_secs(5)),
+        "{}",
+        term.screen()
+    );
+    let results = std::fs::read_to_string(home.path().join("results.jsonl")).unwrap();
+    let result: serde_json::Value = serde_json::from_str(results.lines().next().unwrap()).unwrap();
+    assert_eq!(result["textType"], "code", "{results}");
+    assert_eq!(result["errors"], 0, "{lesson}");
+    assert!(term.quit());
+
+    // A folder without code says so, and practices generated code instead.
+    let settings = serde_json::json!({
+        "lesson.type": "files",
+        "lesson.files.path": code.path().join("missing").display().to_string(),
+    });
+    std::fs::write(home.path().join("settings.json"), settings.to_string()).unwrap();
+    let mut term = Term::start(home.path(), 40, 110);
+    assert!(
+        term.screen().contains("No code to practice in"),
+        "{}",
+        term.screen()
+    );
+    assert!(term.box_text().chars().count() > 20);
+    assert!(term.quit());
+}
+
+#[test]
 fn every_screen_renders() {
     let home = tempfile::tempdir().unwrap();
     let mut term = Term::start(home.path(), 42, 130);
@@ -625,6 +681,8 @@ fn command_line() {
     assert_eq!(exported[0]["histogram"].as_array().unwrap().len(), 3);
     let (ok, _) = keeper(home.path(), &["import", "/nonexistent"]);
     assert!(!ok);
+    let (ok, out) = keeper(home.path(), &["code", "/nonexistent"]);
+    assert!(!ok && out.contains("cannot open /nonexistent"), "{out}");
     let (ok, out) = keeper(home.path(), &["--help"]);
     assert!(ok && out.contains("typing tutor"), "{out}");
 }

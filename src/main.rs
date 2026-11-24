@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use keeper::app::App;
 use keeper::result::{StreakList, SummaryStats};
-use keeper::settings::Settings;
+use keeper::settings::{LessonType, Settings};
 use keeper::storage::Storage;
 use keeper::ui::format_duration;
 use ratatui::crossterm::cursor::SetCursorStyle;
@@ -43,6 +43,12 @@ enum Command {
     },
     /// Print the directory where Keeper keeps its data.
     Path,
+    /// Practice your own code: lessons from a source file, or from the
+    /// source files in a folder.
+    Code {
+        /// A source file or a folder.
+        path: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -70,6 +76,15 @@ fn main() -> Result<()> {
         Some(Command::Path) => {
             println!("{}", storage.dir().display());
             Ok(())
+        }
+        Some(Command::Code { path }) => {
+            let path = std::fs::canonicalize(&path)
+                .with_context(|| format!("cannot open {}", path.display()))?;
+            let mut settings = storage.load_settings();
+            settings.lesson_type = LessonType::Files;
+            settings.files_path = path.display().to_string();
+            storage.save_settings(&settings)?;
+            run(storage)
         }
     }
 }

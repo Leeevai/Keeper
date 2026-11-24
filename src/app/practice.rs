@@ -260,6 +260,12 @@ impl Practice {
             .border_type(BorderType::Rounded)
             .border_style(ctx.styles.border)
             .title(Span::styled(title, ctx.styles.name));
+        let block = match &self.lesson.notice {
+            Some(notice) => {
+                block.title_bottom(Span::styled(format!(" {notice} "), ctx.styles.error))
+            }
+            None => block,
+        };
         let inner = block.inner(box_area);
         frame.render_widget(block, box_area);
         let inner = Rect {
