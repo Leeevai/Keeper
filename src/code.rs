@@ -396,4 +396,26 @@ mod tests {
             }
         }
     }
+
+    /// Keeper's own grammars, and text that only that language has.
+    const KEEPER_SYNTAXES: &[(&str, &[&str])] = &[("kotlin", &["fun ", "val ", "?."])];
+
+    #[test]
+    fn keeper_syntaxes_look_like_their_language() {
+        let all_flags: HashSet<String> = FLAGS.iter().map(|s| s.to_string()).collect();
+        for (id, tokens) in KEEPER_SYNTAXES {
+            let syntax = Syntax::get(id);
+            assert_eq!(syntax.id, *id);
+            let mut rng = Lcg::new(7);
+            let text: Vec<String> = (0..60)
+                .map(|_| flatten(&syntax.generate(&all_flags, &mut rng)))
+                .collect();
+            let text = text.join(" ");
+            for token in *tokens {
+                assert!(text.contains(token), "{id} has no {token:?}: {text}");
+            }
+            // Every option changes something.
+            assert!(!syntax.flags.is_empty(), "{id}");
+        }
+    }
 }

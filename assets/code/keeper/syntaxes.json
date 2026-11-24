@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "kotlin",
+    "name": "Kotlin",
+    "grammar": [
+      "lang_kotlin",
+      "_camel",
+      "_keywords",
+      "_ident",
+      "_literals",
+      "_comments"
+    ],
+    "start": "start"
+  }
+]
