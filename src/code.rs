@@ -67,32 +67,10 @@ pub struct Syntax {
 fn rule_set(name: &str) -> &'static Rules {
     static CACHE: OnceLock<HashMap<String, Rules>> = OnceLock::new();
     let all = CACHE.get_or_init(|| {
-        [
-            "_comments",
-            "_ident",
-            "_keywords",
-            "_literals",
-            "lang_cpp",
-            "lang_csharp",
-            "lang_go",
-            "lang_html_css",
-            "lang_java",
-            "lang_javascript",
-            "lang_php",
-            "lang_python",
-            "lang_regex",
-            "lang_rust",
-            "lang_shell",
-            "lang_typescript",
-        ]
-        .into_iter()
-        .map(|n| {
-            (
-                n.to_string(),
-                serde_json::from_str(assets::grammar_json(n).unwrap()).expect(n),
-            )
-        })
-        .collect()
+        assets::GRAMMARS
+            .iter()
+            .map(|(name, json)| (name.to_string(), serde_json::from_str(json).expect(name)))
+            .collect()
     });
     &all[name]
 }
@@ -101,8 +79,11 @@ impl Syntax {
     pub fn all() -> &'static [Syntax] {
         static ALL: OnceLock<Vec<Syntax>> = OnceLock::new();
         ALL.get_or_init(|| {
-            let data: Vec<SyntaxData> =
+            let mut data: Vec<SyntaxData> =
                 serde_json::from_str(assets::SYNTAXES_JSON).expect("syntaxes.json");
+            let keeper: Vec<SyntaxData> =
+                serde_json::from_str(assets::KEEPER_SYNTAXES_JSON).expect("keeper/syntaxes.json");
+            data.extend(keeper);
             data.into_iter()
                 .map(|d| {
                     let grammar: Vec<&'static Rules> =
@@ -346,7 +327,11 @@ mod tests {
 
     #[test]
     fn every_syntax_generates_code() {
-        assert_eq!(Syntax::all().len(), 16);
+        assert!(Syntax::all().len() >= 16);
+        let mut ids: Vec<&str> = Syntax::all().iter().map(|s| s.id.as_str()).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), Syntax::all().len(), "every syntax id is unique");
         let all_flags: HashSet<String> = FLAGS.iter().map(|s| s.to_string()).collect();
         for syntax in Syntax::all() {
             for flags in [HashSet::new(), all_flags.clone()] {
