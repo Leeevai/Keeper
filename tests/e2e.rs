@@ -791,6 +791,25 @@ fn uses_the_basic_colors_on_the_linux_console() {
     assert!(term.quit());
 }
 
+#[test]
+fn a_chosen_color_mode_wins_over_no_color() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("settings.json"),
+        r#"{"ui.theme": "dracula", "ui.colorMode": "truecolor"}"#,
+    )
+    .unwrap();
+    let mut term = Term::start_with(home.path(), 40, 110, &[("NO_COLOR", "1")]);
+    // Dracula's background, #282a36.
+    let dracula = vt100::Color::Rgb(40, 42, 54);
+    let painted = cells(&term)
+        .iter()
+        .filter(|(_, _, c)| c.bgcolor() == dracula)
+        .count();
+    assert!(painted > 100, "{painted} cells painted\n{}", term.screen());
+    assert!(term.quit());
+}
+
 /// macOS keeps file names in UTF-8, so the test runs where it can make one.
 #[cfg(target_os = "linux")]
 #[test]

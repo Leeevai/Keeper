@@ -18,6 +18,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::cursor::SetCursorStyle;
 use ratatui::crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event};
 use ratatui::crossterm::execute;
+use ratatui::crossterm::style::Colored;
 
 /// The terminal, drawn through a writer that sends the 16 basic colors as
 /// basic escape codes while the 16-color mode is on.
@@ -155,6 +156,10 @@ fn print_stats(storage: &Storage) -> Result<()> {
 
 fn run(storage: Storage) -> Result<()> {
     let mut app = App::new(storage)?;
+    // Keeper applies NO_COLOR itself, when the color mode is Detect; a mode
+    // chosen in the settings wins over it, so Crossterm must not drop the
+    // colors on its own.
+    Colored::set_ansi_color_disabled(false);
     // Raw mode, the alternate screen and restoring them on a panic.
     drop(ratatui::try_init().context("cannot initialize the terminal")?);
     let basic = Arc::new(AtomicBool::new(false));
