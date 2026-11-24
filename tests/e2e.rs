@@ -309,20 +309,23 @@ fn practices_your_own_code() {
     assert_eq!(result["errors"], 0, "{lesson}");
     assert!(term.quit());
 
-    // A folder without code says so, and practices generated code instead.
-    let settings = serde_json::json!({
-        "lesson.type": "files",
-        "lesson.files.path": code.path().join("missing").display().to_string(),
-    });
-    std::fs::write(home.path().join("settings.json"), settings.to_string()).unwrap();
-    let mut term = Term::start(home.path(), 40, 110);
-    assert!(
-        term.screen().contains("No code to practice in"),
-        "{}",
-        term.screen()
-    );
-    assert!(term.box_text().chars().count() > 20);
-    assert!(term.quit());
+    // A path that cannot be read says so, and practices generated code
+    // instead; so does a folder without code.
+    std::fs::create_dir(code.path().join("empty")).unwrap();
+    for (folder, notice) in [
+        ("missing", "Cannot read"),
+        ("empty", "No code to practice in"),
+    ] {
+        let settings = serde_json::json!({
+            "lesson.type": "files",
+            "lesson.files.path": code.path().join(folder).display().to_string(),
+        });
+        std::fs::write(home.path().join("settings.json"), settings.to_string()).unwrap();
+        let mut term = Term::start(home.path(), 40, 110);
+        assert!(term.screen().contains(notice), "{}", term.screen());
+        assert!(term.box_text().chars().count() > 20);
+        assert!(term.quit());
+    }
 }
 
 #[test]

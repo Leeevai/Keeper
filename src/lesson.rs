@@ -347,7 +347,7 @@ enum Kind {
     },
     /// Lines of the user's own source files.
     Files {
-        lines: Vec<String>,
+        files: Vec<Vec<String>>,
     },
 }
 
@@ -458,23 +458,25 @@ impl Lesson {
             LessonType::Code => (Letter::programming(), code()),
             LessonType::Files => {
                 let path = settings.files_path.trim();
-                let lines = if path.is_empty() {
-                    Vec::new()
-                } else {
-                    crate::files::read_lines(&crate::files::expand_home(path), |c| {
+                let shown = crate::files::printable(path);
+                let read = (!path.is_empty()).then(|| {
+                    crate::files::read(&crate::files::expand_home(path), |c| {
                         code_points.has(u32::from(c))
                     })
-                };
-                if lines.is_empty() {
+                });
+                match read {
+                    Some(Ok(files)) if !files.is_empty() => {
+                        (Letter::programming(), Kind::Files { files })
+                    }
                     // Practice the chosen code syntax until there is code.
-                    notice = Some(if path.is_empty() {
-                        "Choose a file or folder of your code in the settings".to_string()
-                    } else {
-                        format!("No code to practice in {path}")
-                    });
-                    (Letter::programming(), code())
-                } else {
-                    (Letter::programming(), Kind::Files { lines })
+                    _ => {
+                        notice = Some(match read {
+                            None => "Choose a file or folder of your code in the settings".into(),
+                            Some(Err(e)) => format!("Cannot read {shown}: {e}"),
+                            Some(Ok(_)) => format!("No code to practice in {shown}"),
+                        });
+                        (Letter::programming(), code())
+                    }
                 }
             }
         };
@@ -669,8 +671,8 @@ impl Lesson {
             }
             Kind::Numbers => plain(generate_numbers(settings.benford, rng)),
             Kind::Code { syntax, flags } => syntax.generate(flags, rng),
-            Kind::Files { lines } => {
-                plain(crate::files::fragment(lines, lesson_chars(settings), rng))
+            Kind::Files { files } => {
+                plain(crate::files::fragment(files, lesson_chars(settings), rng))
             }
         }
     }
@@ -1136,29 +1138,46 @@ mod tests {
             assert!(text.chars().count() >= 100, "{text}");
             assert!(!text.contains("  ") && !text.contains('п'), "{text}");
         }
-        // Without code to practice, the code syntax fills in, with a notice.
+        // Without code to practice, the code syntax fills in, with a notice
+        // that says why.
+        let code_lesson = |seed| {
+            let mut lesson = Lesson::new(&settings(|s| s.lesson_type = LessonType::Code));
+            let keys = lesson.update(&lesson.key_stats(&[]));
+            flatten(&lesson.generate(&keys, &mut Lcg::new(seed)))
+        };
+        let empty = dir.path().join("empty");
+        std::fs::create_dir(&empty).unwrap();
+        let missing = dir.path().join("missing");
         for (path, notice) in [
             (
                 String::new(),
                 "Choose a file or folder of your code in the settings".to_string(),
             ),
             (
-                dir.path().join("missing").display().to_string(),
-                format!(
-                    "No code to practice in {}",
-                    dir.path().join("missing").display()
-                ),
+                empty.display().to_string(),
+                format!("No code to practice in {}", empty.display()),
+            ),
+            (
+                missing.display().to_string(),
+                format!("Cannot read {}: ", missing.display()),
             ),
         ] {
             let mut lesson = Lesson::new(&settings(|s| {
                 s.lesson_type = LessonType::Files;
                 s.files_path = path;
             }));
-            assert_eq!(lesson.notice.as_deref(), Some(notice.as_str()));
+            let shown = lesson.notice.clone().unwrap();
+            assert!(shown.starts_with(&notice), "{shown}");
             let keys = lesson.update(&lesson.key_stats(&[]));
             let text = flatten(&lesson.generate(&keys, &mut Lcg::new(1)));
-            assert!(text.chars().count() > 50, "{text}");
+            assert_eq!(text, code_lesson(1));
         }
+        // A path is shown without the control characters it may hold.
+        let lesson = Lesson::new(&settings(|s| {
+            s.lesson_type = LessonType::Files;
+            s.files_path = "/no\x1b[2Jwhere".into();
+        }));
+        assert!(!lesson.notice.unwrap().contains('\x1b'));
     }
 
     #[test]
